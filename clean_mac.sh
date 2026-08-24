@@ -2472,7 +2472,6 @@ do_purge_ram() {
 do_clean_launchagents() {
   JSON_MODE=true
   local removed=0
-  local err_msgs=()
   local dirs=(
     "$HOME/Library/LaunchAgents"
   )
@@ -2481,13 +2480,13 @@ do_clean_launchagents() {
     dirs+=( "/Library/LaunchAgents" "/Library/LaunchDaemons" )
   fi
   _CURRENT_CATEGORY="launchagents"
-  local d plist out
+  local d plist
   for d in "${dirs[@]}"; do
     [ -d "$d" ] || continue
     while IFS= read -r -d '' plist; do
       if ! plutil -lint "$plist" &>/dev/null; then
         local before_items=$TOTAL_ITEMS
-        out=$(safe_rm "$plist" "LaunchAgent: $(basename "$plist")" 2>&1) || true
+        safe_rm "$plist" "LaunchAgent: $(basename "$plist")" >/dev/null 2>&1 || true
         if [ "$TOTAL_ITEMS" -gt "$before_items" ]; then
           removed=$((removed + 1))
         fi
