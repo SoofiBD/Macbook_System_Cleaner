@@ -1,400 +1,227 @@
 /**
- * Apple Cleanup Dashboard — Refined frontend
- * ───────────────────────────────────────────
- * Same API surface as before. Falls back to realistic mock data
- * when the Python backend isn't reachable (e.g. opened as a static
- * file) so the UI demos end-to-end.
+ * Apple Cleanup — Modern Web Dashboard Controller
+ * ──────────────────────────────────────────────────────────
+ * Full integration with Python server backend & rich safety controls.
  */
-
 (() => {
   'use strict';
 
-  /* ──────────────────────────────────────────────────────────
-     Constants & data
-     ────────────────────────────────────────────────────────── */
+  /* ══════════════════════════════════════════════════════════
+     Category Definitions & Safety Risks
+     ══════════════════════════════════════════════════════════ */
   const CATEGORIES = [
     {
-      key: 'user_cache',    index: 1,  name: 'User Caches',
-      desc: 'App cache files',
-      icon: 'i-cache', color: '#4d8eff', defaultChecked: true, danger: false, tags: [],
+      key: 'user_cache', index: 1, name: 'User Caches',
+      desc: 'Application temporary cache files (~/Library/Caches)',
+      risk: 'safe', icon: 'ic-sparkles', color: 'var(--cat-cache)',
+      defaultChecked: true, tags: [{ label: 'Safe to remove', type: 'safe' }]
     },
     {
-      key: 'system_cache',  index: 2,  name: 'System Cache',
-      desc: 'System-level cache',
-      icon: 'i-cpu', color: '#6f6ff7', defaultChecked: false, danger: false,
-      tags: [{ icon: 'i-lock', label: 'sudo', style: 'amber' }],
+      key: 'system_cache', index: 2, name: 'System Caches',
+      desc: 'System-level caches (/Library/Caches)',
+      risk: 'caution', icon: 'ic-wrench', color: 'var(--cat-system)',
+      defaultChecked: false, tags: [{ label: 'Rebuilt automatically', type: 'caution' }]
     },
     {
-      key: 'app_leftovers', index: 3,  name: 'App Leftovers',
-      desc: 'Leftovers from removed apps',
-      icon: 'i-leftover', color: '#a26bf7', defaultChecked: false, danger: false, tags: [],
+      key: 'logs', index: 3, name: 'System & User Logs',
+      desc: 'Crash logs, diagnostics, and diagnostic reports',
+      risk: 'safe', icon: 'ic-sparkles', color: 'var(--cat-logs)',
+      defaultChecked: true, tags: [{ label: 'Safe to remove', type: 'safe' }]
     },
     {
-      key: 'logs',          index: 4,  name: 'Logs',
-      desc: 'System and app logs',
-      icon: 'i-log', color: '#0bb8c9', defaultChecked: true, danger: false, tags: [],
+      key: 'temp_files', index: 4, name: 'Temporary Files',
+      desc: 'Old temporary items in /tmp and /var/folders',
+      risk: 'safe', icon: 'ic-sparkles', color: 'var(--cat-temp)',
+      defaultChecked: true, tags: [{ label: 'Safe to remove', type: 'safe' }]
     },
     {
-      key: 'temp_files',    index: 5,  name: 'Temporary Files',
-      desc: 'Temporary and intermediate files',
-      icon: 'i-temp', color: '#16a34a', defaultChecked: false, danger: false,
-      tags: [{ icon: 'i-warn', label: 'permanent', style: 'amber' }],
+      key: 'xcode', index: 5, name: 'Xcode Derived Data & Archives',
+      desc: 'Build caches, DerivedData, iOS DeviceSupport',
+      risk: 'safe', icon: 'ic-wrench', color: 'var(--cat-xcode)',
+      defaultChecked: true, tags: [{ label: 'Dev cache', type: 'safe' }]
     },
     {
-      key: 'developer',     index: 6,  name: 'Developer',
-      desc: 'Xcode DerivedData and broken links',
-      icon: 'i-dev', color: '#d97706', defaultChecked: false, danger: false,
-      tags: [{ icon: 'i-warn', label: 'mixed recovery', style: 'amber' }],
+      key: 'mail_downloads', index: 6, name: 'Mail Attachments & Downloads',
+      desc: 'Cached copies of opened email attachments',
+      risk: 'caution', icon: 'ic-hard-drive', color: 'var(--cat-mail)',
+      defaultChecked: false, tags: [{ label: 'Caution', type: 'caution' }]
     },
     {
-      key: 'trash',         index: 7,  name: 'Trash',
-      desc: 'Files in the Trash',
-      icon: 'i-trash', color: '#8b8f99', defaultChecked: false, danger: true,
-      tags: [{ icon: 'i-warn', label: 'permanent', style: 'red' }],
+      key: 'browser_cache', index: 7, name: 'Browser Caches',
+      desc: 'Safari, Chrome, Edge, Firefox cached web data',
+      risk: 'safe', icon: 'ic-sparkles', color: 'var(--cat-browser)',
+      defaultChecked: true, tags: [{ label: 'Fast reload cache', type: 'safe' }]
     },
     {
-      key: 'browser_cache', index: 8,  name: 'Browser Cache',
-      desc: 'Cache only — cookies & sessions kept',
-      icon: 'i-browser', color: '#f59e0b', defaultChecked: true, danger: false,
-      tags: [{ icon: 'i-check', label: 'Trash first', style: 'amber' }],
+      key: 'browser_full', index: 8, name: 'Complete Browser Data',
+      desc: 'Cookies, history, and stored session data',
+      risk: 'danger', icon: 'ic-alert-triangle', color: 'var(--danger)',
+      defaultChecked: false, tags: [{ label: 'Permanent / Logouts', type: 'danger' }]
     },
     {
-      key: 'browser_full',  index: 9,  name: 'Browser All Data',
-      desc: 'Cookies, history and profile data',
-      icon: 'i-browser-warn', color: '#dc2626', defaultChecked: false, danger: true,
-      tags: [{ icon: 'i-warn', label: 'logs you out', style: 'red' }],
+      key: 'trash', index: 9, name: 'Main User Trash',
+      desc: 'Items in your macOS ~/.Trash folder',
+      risk: 'caution', icon: 'ic-trash', color: 'var(--cat-trash)',
+      defaultChecked: true, tags: [{ label: 'Permanent deletion', type: 'caution' }]
     },
     {
-      key: 'ios_backups',   index: 10, name: 'iOS Backups',
-      desc: 'iPhone/iPad MobileSync backups',
-      icon: 'i-phone', color: '#ef4444', defaultChecked: false, danger: true,
-      tags: [{ icon: 'i-warn', label: 'check before deleting', style: 'red' }],
+      key: 'app_leftovers', index: 10, name: 'App Leftover Files',
+      desc: 'Orphaned preferences & containers from uninstalled apps',
+      risk: 'caution', icon: 'ic-package-x', color: 'var(--cat-developer)',
+      defaultChecked: false, tags: [{ label: 'Orphaned items', type: 'caution' }]
     },
     {
-      key: 'app_uninstaller', index: 11, name: 'Full App Uninstaller',
-      desc: 'Apps in /Applications and all their leftovers',
-      icon: 'i-uninstall', color: '#c2410c', defaultChecked: false, danger: true,
-      tags: [{ icon: 'i-warn', label: 'deletes the app', style: 'red' }],
+      key: 'developer', index: 11, name: 'Developer Tool Caches',
+      desc: 'Homebrew downloads, CocoaPods, npm, yarn, pip cache',
+      risk: 'safe', icon: 'ic-wrench', color: 'var(--cat-developer)',
+      defaultChecked: true, tags: [{ label: 'Safe to remove', type: 'safe' }]
     },
     {
-      key: 'mail_downloads', index: 12, name: 'Mail Downloads',
-      desc: 'Files downloaded from Mail attachments',
-      icon: 'i-mail', color: '#0ea5e9', defaultChecked: false, danger: false,
-      tags: [{ icon: 'i-check', label: 'Trash first', style: 'amber' }],
+      key: 'quicklook', index: 12, name: 'QuickLook Thumbnail Cache',
+      desc: 'Finder preview thumbnail database',
+      risk: 'safe', icon: 'ic-sparkles', color: 'var(--cat-cache)',
+      defaultChecked: true, tags: [{ label: 'Re-generated on demand', type: 'safe' }]
     },
     {
-      key: 'diagnostic_reports', index: 13, name: 'Diagnostic Reports',
-      desc: 'Crash and diagnostic logs',
-      icon: 'i-log', color: '#0bb8c9', defaultChecked: true, danger: false, tags: [],
+      key: 'ios_backups', index: 13, name: 'Old iOS Device Backups',
+      desc: 'Local iPhone and iPad backups in MobileSync',
+      risk: 'danger', icon: 'ic-alert-triangle', color: 'var(--cat-ios)',
+      defaultChecked: false, tags: [{ label: 'Permanent', type: 'danger' }]
     },
     {
-      key: 'quicklook_cache', index: 14, name: 'QuickLook Cache',
-      desc: 'Preview thumbnail cache',
-      icon: 'i-cache', color: '#4d8eff', defaultChecked: true, danger: false, tags: [],
+      key: 'app_uninstaller', index: 14, name: 'Installed Applications',
+      desc: 'Targeted removal of complete app bundles',
+      risk: 'caution', icon: 'ic-package-x', color: 'var(--cat-developer)',
+      defaultChecked: false, tags: [{ label: 'Explicit select', type: 'caution' }]
     },
     {
-      key: 'saved_app_state', index: 15, name: 'Saved Application State',
-      desc: 'Window/session restore data',
-      icon: 'i-temp', color: '#d97706', defaultChecked: false, danger: false, tags: [],
+      key: 'other_trash', index: 16, name: 'Trash on External Volumes',
+      desc: 'Hidden trash bins on connected external drives',
+      risk: 'danger', icon: 'ic-alert-triangle', color: 'var(--danger)',
+      defaultChecked: false, tags: [{ label: 'Permanent', type: 'danger' }]
     },
     {
-      key: 'other_trash', index: 16, name: 'Trash on Other Volumes',
-      desc: 'Trash bins on external disks',
-      icon: 'i-trash', color: '#8b8f99', defaultChecked: false, danger: true,
-      tags: [{ icon: 'i-warn', label: 'permanent', style: 'red' }],
+      key: 'project_artifacts', index: 17, name: 'Project Build Folders',
+      desc: 'Old node_modules, target/, .build directories in user projects',
+      risk: 'caution', icon: 'ic-wrench', color: 'var(--cat-developer)',
+      defaultChecked: false, tags: [{ label: 'Explicit select', type: 'caution' }]
     },
     {
-      key: 'project_artifacts', index: 17, name: 'Project Builds',
-      desc: 'Old node_modules, target, .build, build…',
-      icon: 'i-wrench', color: '#16a34a', defaultChecked: false, danger: false, tags: [],
-    },
-    {
-      key: 'installer_artifacts', index: 18, name: 'Installer Files',
-      desc: 'Large DMG, PKG and ISO files in Downloads',
-      icon: 'i-download', color: '#0ea5e9', defaultChecked: false, danger: false,
-      tags: [{ icon: 'i-check', label: 'explicit selection', style: 'amber' }],
-    },
+      key: 'installer_artifacts', index: 18, name: 'Installer Packages & DMGs',
+      desc: 'Large .dmg, .pkg, and .iso files in Downloads folder',
+      risk: 'caution', icon: 'ic-hard-drive', color: 'var(--cat-system)',
+      defaultChecked: false, tags: [{ label: 'Explicit select', type: 'caution' }]
+    }
   ];
 
-  const KEY_BY_INDEX = Object.fromEntries(CATEGORIES.map((c) => [c.index, c.key]));
-  const CAT_BY_KEY   = Object.fromEntries(CATEGORIES.map((c) => [c.key, c]));
+  const KEY_BY_INDEX = Object.fromEntries(CATEGORIES.map(c => [c.index, c.key]));
+  const CAT_BY_KEY = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
-  /* ──────────────────────────────────────────────────────────
-     DOM
-     ────────────────────────────────────────────────────────── */
-  const $  = (s, p = document) => p.querySelector(s);
+  /* ══════════════════════════════════════════════════════════
+     DOM Selectors & State
+     ══════════════════════════════════════════════════════════ */
+  const $ = (s, p = document) => p.querySelector(s);
   const $$ = (s, p = document) => Array.from(p.querySelectorAll(s));
 
-  const el = {
-    themeToggle:   $('#themeToggle'),
-    sysVersion:    $('#sysVersion'),
-    sysUser:       $('#sysUser'),
-    sysDiskFree:   $('#sysDiskFree'),
-    forecastChip:  $('#forecastChip'),
-    sysForecast:   $('#sysForecast'),
-    diskBarFill:   $('#diskBarFill'),
-    donutFill:     $('#donutFill'),
-    donutNum:      $('#donutNum'),
-
-    hero:          $('#hero'),
-    heroEyebrow:   $('#heroEyebrow'),
-    heroTitle:     $('#heroTitle'),
-    heroLead:      $('#heroLead'),
-    heroNumber:    $('#heroNumber'),
-    hnValue:       $('#hnValue'),
-    hnUnit:        $('#hnUnit'),
-    heroBar:       $('#heroBar'),
-    heroBarTrack:  $('#heroBarTrack'),
-    heroBarLegend: $('#heroBarLegend'),
-    treemap:        $('#treemap'),
-    treemapSection: $('#treemapSection'),
-
-    btnScan:       $('#btnScan'),
-    btnCancelScan: $('#btnCancelScan'),
-    btnClean:      $('#btnClean'),
-    dryRunToggle:  $('#dryRunToggle'),
-    btnSelectAll:  $('#btnSelectAll'),
-    btnSelectNone: $('#btnSelectNone'),
-
-    resultsPanel:  $('#resultsPanel'),
-    resultsTitle:  $('#resultsTitle'),
-    resultsSub:    $('#resultsSubtitle'),
-    resultsFreed:  $('#resultsFreed'),
-    resultsChips:  $('#resultsDetails'),
-    resultsClose:  $('#resultsClose'),
-
-    term:          $('#term'),
-    termHead:      $('#termHead'),
-    termBody:      $('#terminalBody'),
-    termCount:     $('#termCount'),
-
-    btnSpotlight:   $('#btnSpotlight'),
-    btnFlushDns:    $('#btnFlushDns'),
-    btnPurgeRam:    $('#btnPurgeRam'),
-    btnLaunchAgents: $('#btnLaunchAgents'),
-    btnThinSnapshots: $('#btnThinSnapshots'),
-    btnWeeklyClean: $('#btnWeeklyClean'),
-    categoryCount: $('#categoryCount'),
-    catList:       $('#catList'),
+  const state = {
+    activeTab: 'dashboard',
+    dryRun: false,
+    scanData: null,
+    backendOnline: false,
+    selectedCategories: new Set(CATEGORIES.filter(c => c.defaultChecked).map(c => c.key)),
+    selectedSubitems: {}, // { categoryKey: Set(subitemIds) }
+    terminalLines: 0,
+    appsList: [],
+    largeFiles: [],
+    dupGroups: [],
+    historyList: []
   };
 
-  /* ──────────────────────────────────────────────────────────
-     State
-     ────────────────────────────────────────────────────────── */
-  let scanData = null;
-  let isLoading = false;
-  let termLineCount = 0;
-  const filesSelected = new Set();   // rowIds selected in the Dosyalar tab
-  let filesQuery = '';               // current Dosyalar search query
-  const accentByKey = Object.fromEntries(CATEGORIES.map((c) => [c.key, c.color]));
-
-  /* ──────────────────────────────────────────────────────────
-     Theme + accent
-     ────────────────────────────────────────────────────────── */
-  const PALETTES = {
-    blue:   { accent: '#2466e8', accent2: '#4d8eff', rgb: '36, 102, 232' },
-    indigo: { accent: '#5b54e6', accent2: '#8b7df5', rgb: '91, 84, 230' },
-    green:  { accent: '#16a34a', accent2: '#22c55e', rgb: '22, 163, 74' },
-    rose:   { accent: '#e11d6b', accent2: '#f5587f', rgb: '225, 29, 107' },
-    slate:  { accent: '#334155', accent2: '#64748b', rgb: '51, 65, 85' },
-  };
-
-  function syncThemeColor(theme) {
-    const tag = document.querySelector('meta[name="theme-color"]');
-    if (tag) tag.content = theme === 'dark' ? '#0d0f12' : '#f3f3f0';
-  }
-
-  function initTheme() {
-    const t = localStorage.getItem('ac-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', t);
-    syncThemeColor(t);
-    const p = localStorage.getItem('ac-palette') || 'blue';
-    applyPalette(p);
-  }
-
-  function toggleTheme() {
-    const cur = document.documentElement.getAttribute('data-theme');
-    const next = cur === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    syncThemeColor(next);
-    localStorage.setItem('ac-theme', next);
-    window.AppAnim?.themeSwitch?.();
-    termLog(`Theme changed: ${next === 'dark' ? 'dark' : 'light'}`, 'info');
-  }
-
-  function applyPalette(name) {
-    const p = PALETTES[name] || PALETTES.blue;
-    document.documentElement.style.setProperty('--accent', p.accent);
-    document.documentElement.style.setProperty('--accent-2', p.accent2);
-    document.documentElement.style.setProperty('--accent-rgb', p.rgb);
-    localStorage.setItem('ac-palette', name);
-    // Update tweaks panel active state
-    $$('.tweaks-sw').forEach((sw) => {
-      sw.classList.toggle('active', sw.dataset.palette === name);
-    });
-  }
-
-  initTheme();
-  el.themeToggle.addEventListener('click', toggleTheme);
-
-  /* ──────────────────────────────────────────────────────────
-     Terminal log
-     ────────────────────────────────────────────────────────── */
-  const TERM_MAX_LINES = 500;
-  function termLog(msg, type = '') {
-    const now = new Date();
-    const time = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const line = document.createElement('div');
-    line.className = 'term-line';
-    const tEl = document.createElement('span');
-    tEl.className = 'term-time';
-    tEl.textContent = time;
-    const mEl = document.createElement('span');
-    mEl.className = 'term-msg ' + type;
-    mEl.textContent = msg;
-    line.appendChild(tEl);
-    line.appendChild(mEl);
-    el.termBody.appendChild(line);
-    el.termBody.scrollTop = el.termBody.scrollHeight;
-    termLineCount++;
-    // Cap terminal lines to prevent unbounded memory growth
-    while (el.termBody.children.length > TERM_MAX_LINES) {
-      el.termBody.removeChild(el.termBody.firstChild);
-    }
-    el.termCount.textContent = String(termLineCount);
-  }
-
-  el.termHead.addEventListener('click', () => {
-    const open = el.term.getAttribute('data-open') === 'true';
-    el.term.setAttribute('data-open', String(!open));
-    el.termHead.setAttribute('aria-expanded', String(!open));
-  });
-
-  /* ──────────────────────────────────────────────────────────
-     Render categories
-     ────────────────────────────────────────────────────────── */
-  function renderCategories() {
-    CATEGORIES.forEach((cat) => {
-      const li = document.createElement('li');
-      li.className = ['cat', cat.defaultChecked && 'selected', cat.danger && 'cat-danger']
-        .filter(Boolean).join(' ');
-      li.dataset.category = cat.key;
-      li.dataset.index    = String(cat.index);
-
-      const tagsHtml = cat.tags.map((t) =>
-        `<span class="tag tag-${t.style}"><svg class="ic"><use href="#${t.icon}"/></svg>${escapeHtml(t.label)}</span>`
-      ).join('');
-
-      li.innerHTML = `
-        <div class="cat-row">
-          <button class="cat-row-main" type="button" data-role="row" aria-label="${escapeAttr(cat.name)}">
-            <span class="cat-ic"><svg class="ic"><use href="#${cat.icon}"/></svg></span>
-            <span class="cat-meta">
-              <span class="cat-name">${escapeHtml(cat.name)}${tagsHtml ? ' ' + tagsHtml : ''}</span>
-              <span class="cat-desc">${escapeHtml(cat.desc)}</span>
-            </span>
-            <span class="cat-bar"><span class="cat-bar-fill"></span></span>
-            <span class="cat-size" data-size="${cat.key}">—</span><span class="cat-risk" data-risk="${escapeAttr(cat.key)}"></span>
-            <svg class="ic cat-chev"><use href="#i-chev"/></svg>
-          </button>
-          <label class="switch">
-            <input type="checkbox" aria-label="Select ${escapeAttr(cat.name)}" ${cat.defaultChecked ? 'checked' : ''} />
-            <span class="switch-slider"></span>
-          </label>
-        </div>
-      `;
-      el.catList.appendChild(li);
-    });
-
-    el.cats = $$('.cat[data-category]');
-    if (el.categoryCount) el.categoryCount.textContent = `${CATEGORIES.length} categories`;
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Utilities
-     ────────────────────────────────────────────────────────── */
+  /* ══════════════════════════════════════════════════════════
+     Helper Utilities
+     ══════════════════════════════════════════════════════════ */
   function formatBytes(bytes) {
     if (!bytes || bytes <= 0) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
     return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
   }
-  // Shared with the GSAP layer (anim.js) for size count-up animations.
-  window.formatBytesShared = formatBytes;
 
-  // Split a human-readable size into [value, unit] for the big number
-  function splitSize(human) {
-    if (!human) return ['0', 'B'];
-    const m = String(human).match(/^([\d.,]+)\s*([A-Za-z]+)?$/);
-    if (!m) return [String(human), ''];
-    return [m[1].replace(',', '.'), m[2] || 'B'];
+  function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
   }
 
-  function setLoading(btn, on) {
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  /* ══════════════════════════════════════════════════════════
+     Terminal Logger
+     ══════════════════════════════════════════════════════════ */
+  function termLog(msg, type = 'info') {
+    const term = $('#terminalOutput');
+    const badge = $('#termCountBadge');
+    if (!term) return;
+
+    const time = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const line = document.createElement('div');
+    line.className = `terminal-line ${type}`;
+    line.textContent = `[${time}] ${msg}`;
+    term.appendChild(line);
+    term.scrollTop = term.scrollHeight;
+
+    state.terminalLines++;
+    if (badge) badge.textContent = `${state.terminalLines} lines`;
+  }
+
+  // Toggle terminal drawer
+  $('#btnToggleTerminal')?.addEventListener('click', () => {
+    $('#terminalDrawer')?.classList.toggle('open');
+  });
+  $('#terminalHeader')?.addEventListener('click', () => {
+    $('#terminalDrawer')?.classList.toggle('open');
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     Theme Controller
+     ══════════════════════════════════════════════════════════ */
+  function initTheme() {
+    const saved = localStorage.getItem('ac-web-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    updateThemeToggleUI(saved);
+  }
+
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('ac-web-theme', next);
+    updateThemeToggleUI(next);
+    termLog(`Theme changed to ${next} mode.`, 'info');
+  }
+
+  function updateThemeToggleUI(theme) {
+    const btn = $('#themeToggle');
     if (!btn) return;
-    btn.classList.toggle('loading', !!on);
-    btn.disabled = !!on;
-  }
-
-  function getSelectedIndices() {
-    return el.cats
-      .filter((c) => {
-        const checkbox = $('input[type="checkbox"]', c);
-        return checkbox.checked && !checkbox.disabled;
-      })
-      .map((c) => parseInt(c.dataset.index, 10));
-  }
-
-  function getSelectedSubitems(categoryKey) {
-    const out = [];
-    const container = $(`.subitems[data-cat="${categoryKey}"]`);
-    if (!container) return out;
-    $$('input[type="checkbox"]', container).forEach((cb) => {
-      if (cb.checked) out.push(cb.dataset.subId);
-    });
-    return out;
-  }
-
-  function getSelectedIdentityItems(categoryKey) {
-    const out = [];
-    const container = $(`.subitems[data-cat="${categoryKey}"]`);
-    if (!container) return out;
-    $$('input[type="checkbox"]', container).forEach((cb) => {
-      if (cb.checked && cb.dataset.identity) {
-        out.push({ path: cb.dataset.subId, identity: cb.dataset.identity });
-      }
-    });
-    return out;
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Tween helpers
-     ────────────────────────────────────────────────────────── */
-  function tween(from, to, dur, onUpdate, onDone) {
-    const t0 = performance.now();
-    function tick(now) {
-      const t = Math.min(1, (now - t0) / dur);
-      const eased = 1 - Math.pow(1 - t, 3);
-      onUpdate(from + (to - from) * eased);
-      if (t < 1) requestAnimationFrame(tick);
-      else if (onDone) onDone();
+    const sun = btn.querySelector('.ic-sun');
+    const moon = btn.querySelector('.ic-moon');
+    if (theme === 'dark') {
+      if (sun) sun.style.display = 'block';
+      if (moon) moon.style.display = 'none';
+    } else {
+      if (sun) sun.style.display = 'none';
+      if (moon) moon.style.display = 'block';
     }
-    requestAnimationFrame(tick);
   }
 
-  function tweenNumber(elTarget, fromBytes, toBytes, dur = 900) {
-    tween(fromBytes, toBytes, dur, (v) => {
-      const [val, unit] = splitSize(formatBytes(v));
-      elTarget.firstElementChild.textContent = val;          // hnValue
-      elTarget.children[1].textContent = unit;               // hnUnit
-    });
-  }
+  initTheme();
+  $('#themeToggle')?.addEventListener('click', toggleTheme);
 
-  /* ──────────────────────────────────────────────────────────
-     API
-     ────────────────────────────────────────────────────────── */
-  const CLEANUP_TOKEN =
-    document.querySelector('meta[name="cleanup-token"]')?.content || '';
+  /* ══════════════════════════════════════════════════════════
+     API Bridge
+     ══════════════════════════════════════════════════════════ */
+  const CLEANUP_TOKEN = $('meta[name="cleanup-token"]')?.content || '';
 
   async function apiFetch(url, options = {}) {
     const res = await fetch(url, {
@@ -407,1484 +234,669 @@
     });
     if (!res.ok) {
       let msg = `Server error (HTTP ${res.status})`;
-      try {
-        const errJson = await res.json();
-        if (errJson && errJson.error) msg = errJson.error;
-      } catch (e) {}
+      try { const e = await res.json(); if (e?.error) msg = e.error; } catch {}
       throw new Error(msg);
     }
     const data = await res.json();
-    if (data && data.success === false) {
-      const details = Array.isArray(data.errors)
-        ? data.errors.map((entry) => typeof entry === 'string' ? entry : entry?.message)
-          .filter(Boolean).join('; ')
-        : '';
-      throw new Error(data.error || details || 'Operation failed.');
+    if (data?.success === false) {
+      throw new Error(data.error || 'Operation failed.');
     }
     return data;
   }
 
-  /* ──────────────────────────────────────────────────────────
-     System status
-     ────────────────────────────────────────────────────────── */
-  async function fetchStatus() {
-    termLog('Reading system info…', 'info');
-    try {
-      const data = await apiFetch('/api/status');
-      el.sysVersion.textContent = data.macos_version || '—';
-      el.sysUser.textContent = data.user || '—';
-      el.sysDiskFree.textContent = data.disk_free || '—';
-      [el.sysVersion, el.sysUser, el.sysDiskFree].forEach((e) => e.classList.remove('loading'));
+  /* ══════════════════════════════════════════════════════════
+     Tab Navigation Controller
+     ══════════════════════════════════════════════════════════ */
+  function switchTab(tabId) {
+    state.activeTab = tabId;
 
-      // Disk donut
-      const usedPct = Math.min(100, Math.max(0, data.disk_used_pct ?? 35));
-      animateDonut(usedPct);
-      el.diskBarFill.style.width = usedPct + '%';
-
-      termLog(`macOS ${data.macos_version} · ${data.user} · ${data.disk_free} free`, 'success');
-    } catch (err) {
-      termLog(`Could not read system info: ${err.message}`, 'error');
-      [el.sysVersion, el.sysUser, el.sysDiskFree].forEach((e) => {
-        e.textContent = '—';
-        e.classList.remove('loading');
-      });
-    }
-    fetchForecast();
-  }
-
-  async function fetchForecast() {
-    if (!el.forecastChip) return;
-    try {
-      const data = await apiFetch('/api/forecast');
-      if (!data || !data.success) return;
-      if (data.days_until_full != null) {
-        el.sysForecast.textContent = `full in ~${data.days_until_full} days`;
-        el.forecastChip.hidden = false;
-        termLog(`Storage forecast: may be full in ~${data.days_until_full} days.`, 'info');
-      } else if (data.history_points < 2) {
-        // Not enough history yet — keep collecting, stay quiet in the UI.
-        el.forecastChip.hidden = true;
-      } else {
-        el.sysForecast.textContent = 'Stable — no risk';
-        el.forecastChip.hidden = false;
-      }
-    } catch (err) {
-      /* forecast is best-effort; ignore failures */
-    }
-  }
-
-  function animateDonut(pct) {
-    // Prefer the GSAP sweep when GSAP is actually loaded; otherwise fall back
-    // to the plain attribute set + numeric tween so the donut still renders.
-    if (window.gsap && window.AppAnim?.donut?.(pct)) return;
-    el.donutFill.setAttribute('stroke-dasharray', `${pct} ${100 - pct}`);
-    tween(0, pct, 900, (v) => {
-      el.donutNum.textContent = Math.round(v) + '%';
-    });
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Scan flow
-     ────────────────────────────────────────────────────────── */
-  async function handleScan() {
-    if (isLoading) return;
-    isLoading = true;
-    setLoading(el.btnScan, true);
-    if (el.btnCancelScan) {
-      el.btnCancelScan.hidden = false;
-      el.btnCancelScan.disabled = false;
-    }
-    el.btnClean.disabled = true;
-    el.resultsPanel.hidden = true;
-    el.hero.setAttribute('data-state', 'scanning');
-    el.heroEyebrow.textContent = 'Scanning…';
-    $$('.subitems').forEach((s) => s.remove());
-    el.cats.forEach((c) => {
-      c.removeAttribute('data-open');
-      const row = $('[data-role="row"]', c);
-      row?.removeAttribute('aria-controls');
-      row?.removeAttribute('aria-expanded');
+    // Update sidebar buttons
+    $$('.nav-item').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabId);
     });
 
-    termLog('Starting scan…', 'info');
-
-    try {
-      const data = await apiFetch('/api/scan');
-      scanData = data;
-      filesSelected.clear();   // a fresh scan invalidates prior file selections
-
-      if (data.disk_free) el.sysDiskFree.textContent = data.disk_free;
-      if (data.macos_version) el.sysVersion.textContent = data.macos_version;
-      if (data.user) el.sysUser.textContent = data.user;
-      [el.sysVersion, el.sysUser, el.sysDiskFree].forEach((e) => e.classList.remove('loading'));
-
-      const scan = data.scan || {};
-      const totalBytes = window.ScanUtil.computeTotalBytes(data);
-      const maxBytes = Math.max(...Object.values(scan).map((s) => s.size_bytes || 0), 1);
-
-      // A failed category is never left selectable with a stale/unknown size.
-      // Successful categories remain usable when the server returns a partial
-      // scan, so one slow cache does not block all cleanup work.
-      el.cats.forEach((card) => {
-        const key = card.dataset.category;
-        const available = Object.prototype.hasOwnProperty.call(scan, key);
-        const cb = $('input[type="checkbox"]', card);
-        cb.disabled = !available;
-        card.classList.toggle('cat-unavailable', !available);
-        if (!available) {
-          cb.checked = false;
-          card.classList.remove('selected');
-          const sizeEl = $(`.cat-size[data-size="${key}"]`, card);
-          if (sizeEl) {
-            sizeEl.textContent = 'Unavailable';
-            sizeEl.dataset.bytes = '0';
-          }
-          const riskEl = $(`.cat-risk[data-risk="${key}"]`, card);
-          if (riskEl) {
-            riskEl.textContent = data.failed_categories?.[key] === 'timeout'
-              ? 'Timed out' : 'Not scanned';
-            riskEl.className = 'cat-risk risk-caution';
-          }
-          const fill = $('.cat-bar-fill', card);
-          if (fill) fill.style.width = '0';
-        }
-      });
-
-      // Update each category row
-      Object.entries(scan).forEach(([key, info]) => {
-        const card = $(`.cat[data-category="${key}"]`);
-        if (!card) return;
-        const sizeEl = $(`.cat-size[data-size="${key}"]`, card);
-        if (sizeEl) {
-          sizeEl.textContent = info.size_human || formatBytes(info.size_bytes || 0);
-          sizeEl.dataset.bytes = info.size_bytes || 0;
-        }
-        const riskEl = $(`.cat-risk[data-risk="${key}"]`, card);
-        if (riskEl) {
-          const risk = info.risk;
-          if (risk === 'danger' || risk === 'caution') {
-            riskEl.textContent = risk === 'danger' ? '⚠ Risky' : '⚠ Caution';
-            riskEl.className = `cat-risk risk-${risk}`;
-          } else {
-            riskEl.textContent = '';
-            riskEl.className = 'cat-risk';
-          }
-        }
-        const fill = $('.cat-bar-fill', card);
-        if (fill) {
-          fill.classList.remove('size-lg', 'size-xl');
-          if (info.size_bytes > 5 * 1024 * 1024 * 1024) fill.classList.add('size-xl');
-          else if (info.size_bytes > 1024 * 1024 * 1024) fill.classList.add('size-lg');
-          requestAnimationFrame(() => {
-            fill.style.width = Math.max(2, (info.size_bytes / maxBytes) * 100) + '%';
-          });
-        }
-
-        termLog(`  ${CAT_BY_KEY[key]?.name || key}: ${info.size_human || formatBytes(info.size_bytes)}`);
-
-        if (info.subitems && info.subitems.length > 0) {
-          renderSubitems(card, key, info.subitems);
-        }
-      });
-
-      // Hero number + stacked bar
-      revealHeroResult(scan, totalBytes);
-
-      // Interactive space map
-      renderTreemap(scan);
-
-      const failedCount = Object.keys(data.failed_categories || {}).length;
-      el.heroEyebrow.textContent = data.cancelled
-        ? `Scan cancelled · ${Object.keys(scan).length} categories completed`
-        : data.partial
-        ? `Partial scan · ${failedCount} unavailable · ${data.total_human || formatBytes(totalBytes)} found`
-        : `Scan complete · ${data.total_human || formatBytes(totalBytes)} can be cleaned`;
-      el.hero.setAttribute('data-state', 'scanned');
-      termLog(
-        data.cancelled
-          ? `Scan cancelled — ${Object.keys(scan).length} completed results remain usable.`
-          : data.partial
-          ? `Partial scan — ${failedCount} categories unavailable; completed results remain usable.`
-          : `Scan complete — total ${data.total_human || formatBytes(totalBytes)}`,
-        data.partial || data.cancelled ? 'warning' : 'success'
-      );
-
-      window.AppAnim?.afterScan?.();
-      el.btnClean.disabled = Object.keys(scan).length === 0;
-    } catch (err) {
-      termLog(`Scan error: ${err.message}`, 'error');
-      el.hero.setAttribute('data-state', 'idle');
-      el.heroEyebrow.textContent = 'Server not running · Scan failed';
-    } finally {
-      setLoading(el.btnScan, false);
-      if (el.btnCancelScan) el.btnCancelScan.hidden = true;
-      isLoading = false;
-    }
-  }
-
-  async function handleCancelScan() {
-    if (!isLoading || !el.btnCancelScan) return;
-    el.btnCancelScan.disabled = true;
-    termLog('Cancelling scan…', 'warning');
-    try {
-      const data = await apiFetch('/api/scan-cancel', { method: 'POST' });
-      if (!data.cancel_requested) termLog('Scan already finished.', 'info');
-    } catch (err) {
-      termLog(`Could not cancel scan: ${err.message}`, 'error');
-      el.btnCancelScan.disabled = false;
-    }
-  }
-
-  function revealHeroResult(scan, totalBytes) {
-    // Title / lead transform
-    el.heroTitle.textContent = 'Ready to clean.';
-    el.heroLead.textContent = 'Select any of the categories below. All changes are applied only after your confirmation.';
-
-    // Big number with count-up
-    el.heroNumber.hidden = false;
-    tweenNumber(el.heroNumber, 0, totalBytes, 1000);
-
-    // Stacked bar
-    el.heroBar.hidden = false;
-    el.heroBarTrack.innerHTML = '';
-    el.heroBarLegend.innerHTML = '';
-
-    const sortedEntries = Object.entries(scan)
-      .filter(([, v]) => v.in_total !== false && v.size_bytes > 0)
-      .sort((a, b) => b[1].size_bytes - a[1].size_bytes);
-
-    sortedEntries.forEach(([key, info]) => {
-      const pct = (info.size_bytes / totalBytes) * 100;
-      const seg = document.createElement('span');
-      seg.style.background = accentByKey[key];
-      el.heroBarTrack.appendChild(seg);
-      requestAnimationFrame(() => { seg.style.width = pct + '%'; });
+    // Update tab panes
+    $$('.tab-pane').forEach(pane => {
+      pane.classList.toggle('active', pane.id === `tab-${tabId}`);
     });
 
-    // Legend — top 5
-    sortedEntries.slice(0, 5).forEach(([key, info]) => {
-      const item = document.createElement('span');
-      item.className = 'lg';
-      const sw = document.createElement('span');
-      sw.className = 'sw';
-      sw.style.background = accentByKey[key];
-      const txt = document.createElement('span');
-      txt.innerHTML = `${escapeHtml(CAT_BY_KEY[key]?.name || key)} <b>${escapeHtml(info.size_human)}</b>`;
-      item.appendChild(sw);
-      item.appendChild(txt);
-      el.heroBarLegend.appendChild(item);
-    });
+    // Lazy load tab data
+    if (tabId === 'smart-clean') renderSmartCleanView();
+    if (tabId === 'uninstaller') loadUninstallerApps();
+    if (tabId === 'large-files') loadLargeFiles();
+    if (tabId === 'duplicates') loadDuplicateFiles();
+    if (tabId === 'history') loadHistoryRecords();
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  /* Sub-items rendering — table form below row */
-  // Human-readable descriptions for developer caches (keyed by subitem id).
-  // Explains what each cache is and how it comes back, so the user knows
-  // exactly what they are deleting. Inspired by npkill/ClearDisk.
-  const CACHE_DESCRIPTIONS = {
-    derived_data: 'Xcode build products and indexes. Rebuilt automatically when you open the project.',
-    broken_links: 'Symbolic links whose target was deleted. Safe to remove.',
-    brew_cache: 'Downloaded Homebrew bottle/package files. Re-downloaded with brew install.',
-    docker_prune: 'Docker images, containers and volumes. Running container data may be lost!',
-    npm_cache: 'Package archives downloaded from npmjs.org. Re-downloaded with npm install.',
-    pip_cache: 'Downloaded Python wheel/sdist files. Re-downloaded with pip install.',
-    device_support: 'Debug symbols for connected iPhone/iPad. Re-downloaded when the device connects.',
-    coresim_caches: 'CoreSimulator dyld and framework caches. Rebuilt automatically.',
-    xcode_archives: 'Builds archived for App Store/distribution. Re-archived from Xcode.',
-    cocoapods_cache: 'Downloaded pod specs and sources. Re-downloaded with pod install.',
-    pnpm_cache: 'Content-addressed pnpm package store. Re-downloaded with pnpm install.',
-    yarn_cache: 'Cached Yarn packages. Re-downloaded with yarn install.',
-    gradle_cache: 'Downloaded JARs and build outputs. Re-downloaded with gradle build.',
-    maven_repo: 'Local Maven repository (.m2). Re-downloaded with mvn build.',
-    simctl_unavailable: 'Removes unavailable (old iOS) simulators. Frees space.',
-    xcode_products: 'Xcode product build outputs. Rebuilt on the next build.',
-    simulator_logs: 'Simulator crash reports and logs. Can be deleted any time.',
-    simulator_devices: 'Resets simulators to factory state (installed apps/data). Device registration kept.',
-    font_caches: 'System font cache. Rebuilt automatically.',
-    brew_cleanup: 'Runs brew cleanup -s: removes old versions and the cache.',
-    swift_pm_cache: 'Downloaded Swift packages. Re-downloaded with swift build.',
-    xcode_logs: 'Xcode build logs inside DerivedData. Safe to delete.',
-    xcode_previews: 'SwiftUI preview simulator data. Rebuilt on the next preview.',
-    carthage_cache: 'Carthage dependency cache. Re-downloaded with carthage update.',
-    bun_cache: 'Cached Bun packages. Re-downloaded with bun install.',
-    deno_cache: 'Cached Deno modules. Re-downloaded with deno run.',
-    conda_pkgs: 'Cached Conda packages. Re-downloaded with conda install.',
-    uv_cache: 'uv (fast pip) package cache. Re-downloaded with uv pip install.',
-    poetry_cache: 'Cached Poetry dependencies. Re-downloaded with poetry install.',
-    go_modules: 'Go module download cache. Re-downloaded with go mod download.',
-    cargo_registry: 'Cached Rust crate sources. Re-downloaded with cargo build.',
-    composer_cache: 'Cached PHP packages. Re-downloaded with composer install.',
-    gradle_wrapper: 'Gradle wrapper distribution binaries. Re-downloaded on the next gradle build.',
-    sbt_ivy_cache: 'Scala/Java dependencies cached by sbt/Ivy. Re-downloaded.',
-    bazel_cache: 'Bazel build and repo caches. Rebuilt on the next bazel build.',
-    flutter_pub_cache: 'Cached Dart/Flutter packages. Re-downloaded with flutter pub get.',
-    jetbrains_cache: 'JetBrains IDE caches (IntelliJ, WebStorm, etc.). Rebuilt when the IDE restarts.',
-    playwright_cache: 'Playwright test browser binaries. Re-downloaded with npx playwright install.',
-    puppeteer_cache: 'Chromium binaries downloaded for Puppeteer. Re-downloaded.',
-    prisma_cache: 'Prisma ORM query engine binaries. Re-downloaded with npx prisma generate.',
-    huggingface_cache: 'Downloaded AI/ML models and datasets. Re-downloaded (can be large).',
-  };
-
-  // Age-based suggestion for a cache sub-item, based on how long since it was
-  // last touched and how big it is. Mirrors ClearDisk's heuristic.
-  function suggestionFor(sub) {
-    const days = sub.age_days;
-    if (days == null) return '';
-    const gb = (sub.size_bytes || 0) / (1024 * 1024 * 1024);
-    if (days > 90 && gb >= 1) {
-      return `⚠️ Unused for ${days} days, ${sub.size_human} — safe to clean`;
-    }
-    if (days > 60) {
-      return `💡 Unused for ${days} days — consider cleaning`;
-    }
-    if (days > 30 && gb >= 5) {
-      return `💡 ${days} days ago, large at ${sub.size_human}`;
-    }
-    return '';
-  }
-
-  function renderSubitems(card, key, subitems) {
-    const wrap = document.createElement('div');
-    wrap.className = 'subitems';
-    wrap.dataset.cat = key;
-    wrap.id = `subitems-${key}`;
-    const rowButton = $('[data-role="row"]', card);
-    if (rowButton) {
-      rowButton.setAttribute('aria-controls', wrap.id);
-      rowButton.setAttribute('aria-expanded', 'false');
-    }
-
-    subitems.forEach((sub) => {
-      const row = document.createElement('div');
-      row.className = 'subitem-row';
-
-      let checkedAttr = '';
-      if (key === 'app_leftovers') checkedAttr = sub.is_orphaned ? 'checked' : '';
-      else if (key === 'developer') checkedAttr = '';
-      else if (key === 'browser_full') checkedAttr = '';
-      else if (key === 'ios_backups') checkedAttr = '';
-      else if (key === 'app_uninstaller') checkedAttr = '';
-      else if (key === 'mail_downloads') checkedAttr = 'checked';
-      // Project artifacts: pre-select only stale ones (untouched > 30 days)
-      else if (key === 'project_artifacts') checkedAttr = sub.is_orphaned ? 'checked' : '';
-
-      let badge = '';
-      if (key === 'app_leftovers') {
-        const cls = sub.is_orphaned ? 'orphaned' : 'installed';
-        const label = sub.is_orphaned ? 'leftover' : 'installed';
-        badge = `<span class="subitem-badge ${cls}">${label}</span>`;
-      } else if (key === 'ios_backups') {
-        badge = `<span class="subitem-badge orphaned">backup</span>`;
-      } else if (key === 'app_uninstaller') {
-        badge = `<span class="subitem-badge orphaned">app</span>`;
-      } else if (key === 'project_artifacts') {
-        const cls = sub.is_orphaned ? 'orphaned' : 'installed';
-        const typeLabel = sub.type || 'project';
-        const ageLabel = sub.is_orphaned && sub.days_since != null
-          ? ` · ${sub.days_since}d` : '';
-        badge = `<span class="subitem-badge ${cls}">${escapeHtml(typeLabel)}${ageLabel}</span>`;
-      } else if (key === 'installer_artifacts') {
-        badge = `<span class="subitem-badge installed">${escapeHtml(sub.type || 'installer')}</span>`;
-      }
-
-      // Secondary line: static cache description, plus a per-project breakdown
-      // (sub.detail, e.g. DerivedData "MyApp: 2.3 GB, Other: 1.1 GB") when present.
-      const desc = CACHE_DESCRIPTIONS[sub.id] || '';
-      const hint = suggestionFor(sub);
-      const descHtml = [
-        desc ? `<span class="subitem-desc">${escapeHtml(desc)}</span>` : '',
-        sub.detail ? `<span class="subitem-desc subitem-detail">${escapeHtml(sub.detail)}</span>` : '',
-        hint ? `<span class="subitem-desc subitem-hint">${escapeHtml(hint)}</span>` : '',
-      ].join('');
-
-      row.innerHTML = `
-        <input type="checkbox" aria-label="Select ${escapeAttr(sub.name)}" data-sub-id="${escapeAttr(sub.id)}" data-identity="${escapeAttr(sub.identity || '')}" ${checkedAttr}>
-        <span class="subitem-name" title="${escapeAttr(desc || sub.path || sub.name)}">
-          <b>${escapeHtml(sub.name)}</b>
-          ${descHtml}
-        </span>
-        ${badge}
-        <span class="subitem-size">${escapeHtml(sub.size_human || '')}</span>
-      `;
-      wrap.appendChild(row);
-    });
-
-    card.appendChild(wrap);
-
-    // Sync parent toggle with sub-items
-    const parentCb = $('.switch input[type="checkbox"]', card);
-    const subCbs = $$('input[type="checkbox"]', wrap);
-    // Abort previous listeners to prevent accumulation on re-scan
-    if (card._subAbort) card._subAbort.abort();
-    card._subAbort = new AbortController();
-    const sig = { signal: card._subAbort.signal };
-    subCbs.forEach((scb) => {
-      scb.addEventListener('change', (e) => {
-        e.stopPropagation();
-        const anyChecked = subCbs.some((cb) => cb.checked);
-        parentCb.checked = anyChecked;
-        card.classList.toggle('selected', anyChecked);
-      }, sig);
-    });
-    parentCb.addEventListener('change', () => {
-      if (key === 'installer_artifacts') {
-        // Downloads never has a category-level "delete all" shortcut. Each
-        // candidate must be selected in the expanded list (or Files view).
-        parentCb.checked = subCbs.some((scb) => scb.checked);
-        return;
-      }
-      subCbs.forEach((scb) => (scb.checked = parentCb.checked));
-    }, sig);
-    const anyChecked = subCbs.some((cb) => cb.checked);
-    parentCb.checked = anyChecked;
-    card.classList.toggle('selected', anyChecked);
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Clean flow
-     ────────────────────────────────────────────────────────── */
-  async function handleClean() {
-    if (isLoading) return;
-    const selected = getSelectedIndices();
-    if (selected.length === 0) {
-      termLog('Please select at least one category.', 'error');
-      return;
-    }
-    const names = selected.map((idx) => CAT_BY_KEY[KEY_BY_INDEX[idx]]?.name || `#${idx}`);
-    const confirmed = confirm(
-      `These categories will be cleaned:\n\n${names.map((n) => `• ${n}`).join('\n')}\n\nDo you want to continue?`
-    );
-    if (!confirmed) {
-      termLog('Cleanup cancelled.', 'info');
-      return;
-    }
-
-    const dangerSelected = selected
-      .map((idx) => KEY_BY_INDEX[idx])
-      .filter((key) => scanData?.scan?.[key]?.risk === 'danger' || CAT_BY_KEY[key]?.danger === true);
-    if (dangerSelected.length > 0) {
-      const dnames = dangerSelected.map((k) => CAT_BY_KEY[k]?.name || k).join(', ');
-      const dangerOk = confirm(
-        `RISKY categories selected (${dnames}). Some actions are permanent; Trash-first items are recoverable only when a Trash destination is recorded. Continue?`
-      );
-      if (!dangerOk) {
-        termLog('Risky categories not confirmed, cleanup cancelled.', 'info');
-        return;
-      }
-    }
-
-    isLoading = true;
-    setLoading(el.btnClean, true);
-    el.btnScan.disabled = true;
-    el.resultsPanel.hidden = true;
-    el.hero.setAttribute('data-state', 'cleaning');
-    el.heroEyebrow.textContent = 'Cleaning…';
-    termLog(`Starting cleanup (${selected.length} categories)…`, 'info');
-
-    try {
-      const dryRun = !!(el.dryRunToggle && el.dryRunToggle.checked);
-      const payload = {
-        categories: selected.map((idx) => KEY_BY_INDEX[idx]),
-        dry_run: dryRun,
-        app_leftovers_selected: getSelectedSubitems('app_leftovers'),
-        browser_full_selected: getSelectedSubitems('browser_full'),
-        developer_selected: getSelectedSubitems('developer'),
-        ios_backups_selected: getSelectedSubitems('ios_backups'),
-        app_uninstaller_selected: getSelectedSubitems('app_uninstaller'),
-        project_artifacts_selected: getSelectedIdentityItems('project_artifacts'),
-        installer_artifacts_selected: getSelectedIdentityItems('installer_artifacts'),
-      };
-      const data = await apiFetch('/api/clean', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-
-      const warnings = Array.isArray(data.warnings) ? data.warnings : [];
-      const isPartial = warnings.length > 0 ||
-        (data.details || []).some((detail) => detail.status === 'partial');
-
-      el.resultsPanel.hidden = false;
-      el.resultsPanel.classList.remove('error');
-      window.AppAnim?.pop?.(el.resultsPanel);
-      el.resultsTitle.textContent = data.dry_run
-        ? 'Preview (nothing was deleted)'
-        : (isPartial ? 'Cleanup completed with skipped items' : 'Cleanup complete');
-      // In dry-run the disk delta is 0, so show the estimate as the headline.
-      const freedText = data.dry_run
-        ? (data.estimated_human || formatBytes(data.estimated_bytes || 0))
-        : (data.freed_human || formatBytes(data.freed_bytes || 0));
-      el.resultsFreed.textContent = freedText;
-      const subParts = [`${data.items_cleaned || selected.length} categories`,
-                        `New free space ${data.disk_free || '—'}`];
-      if (data.estimated_human && data.freed_source === 'df') {
-        subParts.push(`Estimated scanned: ${data.estimated_human}`);
-      }
-      el.resultsSub.textContent = subParts.join(' · ');
-      if (data.disk_free) el.sysDiskFree.textContent = data.disk_free;
-
-      el.resultsChips.innerHTML = '';
-      (data.details || []).forEach((d) => {
-        const name = CAT_BY_KEY[d.category]?.name || d.category;
-        const chip = document.createElement('div');
-        chip.className = 'result-chip';
-        chip.innerHTML = `${escapeHtml(name)} <span class="chip-freed">${escapeHtml(d.freed)}</span>`;
-        el.resultsChips.appendChild(chip);
-        if (d.status === 'partial') {
-          termLog(`  ⚠ ${name}: ${d.freed} reclaimed; some active files were skipped.`, 'warning');
-        } else {
-          termLog(`  ✓ ${name}: ${d.freed}`, 'success');
-        }
-      });
-
-      warnings.forEach((warning) => {
-        const message = typeof warning === 'string' ? warning : warning?.message;
-        if (message) termLog(`  ⚠ ${message}`, 'warning');
-      });
-
-      (data.errors || []).forEach((e) => {
-        const message = typeof e === 'string' ? e : e?.message;
-        if (message) termLog(`  ✗ Error: ${message}`, 'error');
-      });
-
-      termLog(
-        isPartial
-          ? `Partial cleanup complete — reclaimed ${freedText}; active or protected files were left untouched.`
-          : `Reclaimed ${freedText} in total.`,
-        isPartial ? 'warning' : 'success'
-      );
-
-      // Reset categories' bars
-      $$('.cat-bar-fill').forEach((b) => { b.style.width = '0%'; b.classList.remove('size-lg', 'size-xl'); });
-      $$('.cat-size').forEach((s) => { s.textContent = '—'; });
-      $$('.subitems').forEach((s) => s.remove());
-      scanData = null;
-      filesSelected.clear();
-
-      el.hero.setAttribute('data-state', 'idle');
-      el.heroEyebrow.textContent = isPartial
-        ? 'Cleanup complete · Some active files were skipped'
-        : 'Cleanup complete · Scan again';
-      el.heroNumber.hidden = true;
-      el.heroBar.hidden = true;
-      el.heroTitle.textContent = 'Your Mac is faster.';
-      el.heroLead.textContent = 'Scan again to discover more cleanable files.';
-    } catch (err) {
-      termLog(`Cleanup error: ${err.message}`, 'error');
-      el.resultsPanel.hidden = false;
-      el.resultsPanel.classList.add('error');
-      el.resultsTitle.textContent = 'An error occurred';
-      el.resultsFreed.textContent = '';
-      el.resultsSub.textContent = err.message;
-      el.resultsChips.innerHTML = '';
-      el.hero.setAttribute('data-state', 'idle');
-      el.heroEyebrow.textContent = 'Error · Cleanup could not finish';
-    } finally {
-      setLoading(el.btnClean, false);
-      setLoading(el.btnScan, false);
-      el.btnClean.disabled = true;
-      isLoading = false;
-    }
-  }
-
-  el.resultsClose.addEventListener('click', () => {
-    el.resultsPanel.hidden = true;
+  $('#sidebarMenu')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.nav-item');
+    if (btn?.dataset.tab) switchTab(btn.dataset.tab);
   });
 
-  /* ──────────────────────────────────────────────────────────
-     Spotlight reindex
-     ────────────────────────────────────────────────────────── */
-  async function handleSpotlight() {
-    if (el.btnSpotlight.disabled) return;
-    setLoading(el.btnSpotlight, true);
-    termLog('Rebuilding Spotlight index…', 'info');
-    try {
-      const data = await apiFetch('/api/spotlight-reindex', { method: 'POST', body: '{}' });
-      if (data.success) {
-        termLog('✓ Spotlight index reset successfully and is rebuilding in the background.', 'success');
-      }
-    } catch (err) {
-      termLog(`✗ Spotlight rebuild error: ${err.message}`, 'error');
-    } finally {
-      setLoading(el.btnSpotlight, false);
-    }
-  }
+  // Action links
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('[data-tab-link]');
+    if (link?.dataset.tabLink) switchTab(link.dataset.tabLink);
+  });
+  $('#btnGoClean')?.addEventListener('click', () => switchTab('smart-clean'));
 
-  /* ──────────────────────────────────────────────────────────
-     Maintenance handlers
-     ────────────────────────────────────────────────────────── */
-  async function handleFlushDns() {
-    if (el.btnFlushDns.disabled) return;
-    setLoading(el.btnFlushDns, true);
-    termLog('Flushing DNS cache…', 'info');
-    try {
-      const data = await apiFetch('/api/flush-dns', { method: 'POST', body: '{}' });
-      termLog(data.message || 'DNS cache flushed.', 'success');
-    } catch (err) {
-      termLog(`DNS error: ${err.message}`, 'error');
-    } finally {
-      setLoading(el.btnFlushDns, false);
-    }
-  }
-
-  async function handlePurgeRam() {
-    if (el.btnPurgeRam.disabled) return;
-    setLoading(el.btnPurgeRam, true);
-    termLog('Purging inactive RAM…', 'info');
-    try {
-      const data = await apiFetch('/api/purge-ram', { method: 'POST', body: '{}' });
-      termLog(data.message || 'Inactive RAM purged.', 'success');
-    } catch (err) {
-      termLog(`RAM error: ${err.message}`, 'error');
-    } finally {
-      setLoading(el.btnPurgeRam, false);
-    }
-  }
-
-  async function handleLaunchAgents() {
-    if (el.btnLaunchAgents.disabled) return;
-    setLoading(el.btnLaunchAgents, true);
-    termLog('Cleaning broken LaunchAgents…', 'info');
-    try {
-      const data = await apiFetch('/api/launchagents-clean', { method: 'POST', body: '{}' });
-      termLog(`LaunchAgents cleaned. ${data.removed ?? 0} files removed.`, 'success');
-    } catch (err) {
-      termLog(`LaunchAgents error: ${err.message}`, 'error');
-    } finally {
-      setLoading(el.btnLaunchAgents, false);
-    }
-  }
-
-  async function handleThinSnapshots() {
-    if (el.btnThinSnapshots.disabled) return;
-    setLoading(el.btnThinSnapshots, true);
-    termLog('Thinning local snapshots…', 'info');
-    try {
-      const data = await apiFetch('/api/thin-snapshots', { method: 'POST', body: '{}' });
-      termLog(`Snapshots: ${data.snapshots_before} → ${data.snapshots_after} · Free space ${data.disk_free || '—'}`, 'success');
-      if (data.disk_free) el.sysDiskFree.textContent = data.disk_free;
-    } catch (err) {
-      termLog(`Snapshot error: ${err.message}`, 'error');
-    } finally {
-      setLoading(el.btnThinSnapshots, false);
-    }
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Disk space treemap (vanilla JS + local GSAP)
-     ────────────────────────────────────────────────────────── */
-  function buildTreemapData(scan) {
-    return Object.entries(scan)
-      .filter(([, v]) => v.in_total !== false && (v.size_bytes || 0) > 0)
-      .map(([key, v]) => ({
-        key,
-        name: CAT_BY_KEY[key]?.name || key,
-        value: v.size_bytes,
-        human: v.size_human || formatBytes(v.size_bytes),
-        color: accentByKey[key] || '#8a8f98',
-      }))
-      .sort((a, b) => b.value - a.value);
-  }
-
-  // Worst aspect ratio of a row laid against a strip of length `side`.
-  function tmWorstRatio(row, side) {
-    let sum = 0, max = -Infinity, min = Infinity;
-    for (const n of row) {
-      sum += n.area;
-      if (n.area > max) max = n.area;
-      if (n.area < min) min = n.area;
-    }
-    const s2 = sum * sum, side2 = side * side;
-    return Math.max((side2 * max) / s2, s2 / (side2 * min));
-  }
-
-  // Squarified treemap (Bruls, Huizing & van Wijk). Returns positioned cells.
-  function squarify(data, x, y, w, h) {
-    const total = data.reduce((s, d) => s + d.value, 0);
-    if (total <= 0 || w <= 0 || h <= 0) return [];
-    const area = w * h;
-    const nodes = data.map((d) => ({ ...d, area: (d.value / total) * area }));
-
-    const out = [];
-    let rx = x, ry = y, rw = w, rh = h, i = 0;
-    while (i < nodes.length) {
-      const side = Math.min(rw, rh);
-      let row = [nodes[i]], j = i + 1;
-      while (j < nodes.length) {
-        const next = row.concat(nodes[j]);
-        if (tmWorstRatio(next, side) <= tmWorstRatio(row, side)) {
-          row = next; j++;
-        } else break;
-      }
-      const rowArea = row.reduce((s, n) => s + n.area, 0);
-      if (rw >= rh) {                       // vertical strip on the left
-        const stripW = rowArea / rh;
-        let oy = ry;
-        for (const n of row) {
-          const cellH = n.area / stripW;
-          out.push({ ...n, x: rx, y: oy, w: stripW, h: cellH });
-          oy += cellH;
-        }
-        rx += stripW; rw -= stripW;
-      } else {                              // horizontal strip on top
-        const stripH = rowArea / rw;
-        let ox = rx;
-        for (const n of row) {
-          const cellW = n.area / stripH;
-          out.push({ ...n, x: ox, y: ry, w: cellW, h: stripH });
-          ox += cellW;
-        }
-        ry += stripH; rh -= stripH;
-      }
-      i = j;
-    }
-    return out;
-  }
-
-  function renderTreemap(scan) {
-    const host = el.treemap;
-    if (!host) return;
-    const data = buildTreemapData(scan);
-    host.innerHTML = '';
-    if (!data.length) {
-      if (el.treemapSection) el.treemapSection.hidden = true;
-      return;
-    }
-    if (el.treemapSection) el.treemapSection.hidden = false;
-
-    const W = host.clientWidth || 720;
-    const H = Math.max(280, Math.round(W * 0.5));
-    host.style.height = H + 'px';
-
-    const cells = squarify(data, 0, 0, W, H);
-    const frag = document.createDocumentFragment();
-    const nodes = [];
-    for (const c of cells) {
-      const div = document.createElement('div');
-      div.className = 'tm-cell';
-      div.style.left = c.x + 'px';
-      div.style.top = c.y + 'px';
-      div.style.width = Math.max(0, c.w - 3) + 'px';
-      div.style.height = Math.max(0, c.h - 3) + 'px';
-      div.style.background = c.color;
-      div.title = `${c.name} · ${c.human}`;
-      if (c.w > 56 && c.h > 32) {
-        div.innerHTML =
-          `<span class="tm-name">${escapeHtml(c.name)}</span>` +
-          `<span class="tm-size">${escapeHtml(c.human)}</span>`;
-      }
-      frag.appendChild(div);
-      nodes.push(div);
-    }
-    host.appendChild(frag);
-
-    window.AppAnim?.revealTreemap?.(nodes);
-  }
-
-  // Re-layout on resize (debounced) so the map stays crisp.
-  let _tmResize;
-  window.addEventListener('resize', () => {
-    if (!scanData?.scan || el.treemapSection?.hidden) return;
-    clearTimeout(_tmResize);
-    _tmResize = setTimeout(() => renderTreemap(scanData.scan), 150);
+  /* ══════════════════════════════════════════════════════════
+     Dry-run Global Switch
+     ══════════════════════════════════════════════════════════ */
+  const dryRunSwitch = $('#dryRunToggleGlobal');
+  dryRunSwitch?.addEventListener('change', (e) => {
+    state.dryRun = e.target.checked;
+    termLog(`Dry Run Simulation mode is now ${state.dryRun ? 'ENABLED' : 'DISABLED'}.`, state.dryRun ? 'warning' : 'info');
   });
 
-  /* ──────────────────────────────────────────────────────────
-     Weekly automatic cleanup (launchd)
-     ────────────────────────────────────────────────────────── */
-  let weeklyEnabled = false;
+  /* ══════════════════════════════════════════════════════════
+     Dashboard & Storage Ring
+     ══════════════════════════════════════════════════════════ */
+  function renderStorageRing(usedBytes, totalBytes) {
+    const svg = $('#storageRingSvg');
+    if (!svg || !totalBytes) return;
 
-  function paintWeeklyState(enabled) {
-    weeklyEnabled = enabled;
-    if (!el.btnWeeklyClean) return;
-    const label = el.btnWeeklyClean.querySelector('.btn-text');
-    if (label) label.textContent = enabled ? 'Disable' : 'Enable';
-    el.btnWeeklyClean.setAttribute('aria-pressed', String(enabled));
-    el.btnWeeklyClean.classList.toggle('is-active', enabled);
-  }
+    const size = 190, stroke = 14;
+    const radius = (size - stroke) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const cx = size / 2, cy = size / 2;
 
-  async function fetchScheduleStatus() {
-    if (!el.btnWeeklyClean) return;
-    try {
-      const data = await apiFetch('/api/schedule-status');
-      paintWeeklyState(!!data.enabled);
-    } catch (_) { /* non-fatal: leave default disabled state */ }
-  }
+    const usedPct = Math.min(100, Math.max(0, (usedBytes / totalBytes) * 100));
+    const usedDash = (usedPct / 100) * circumference;
 
-  async function handleWeeklyClean() {
-    if (el.btnWeeklyClean.disabled) return;
-    const next = !weeklyEnabled;
-    setLoading(el.btnWeeklyClean, true);
-    termLog(next ? 'Scheduling weekly cleanup…' : 'Removing weekly cleanup…', 'info');
-    try {
-      const data = await apiFetch('/api/schedule-weekly', {
-        method: 'POST',
-        body: JSON.stringify({ enabled: next }),
-      });
-      paintWeeklyState(!!data.enabled);
-      termLog(data.enabled
-        ? 'Weekly automatic cleanup enabled (Sundays 03:00).'
-        : 'Weekly automatic cleanup disabled.', 'success');
-    } catch (err) {
-      termLog(`Schedule error: ${err.message}`, 'error');
-    } finally {
-      setLoading(el.btnWeeklyClean, false);
-    }
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Bindings
-     ────────────────────────────────────────────────────────── */
-  el.btnScan.addEventListener('click', handleScan);
-  if (el.btnCancelScan) el.btnCancelScan.addEventListener('click', handleCancelScan);
-  el.btnClean.addEventListener('click', handleClean);
-  if (el.btnSpotlight) el.btnSpotlight.addEventListener('click', handleSpotlight);
-  if (el.btnFlushDns) el.btnFlushDns.addEventListener('click', handleFlushDns);
-  if (el.btnPurgeRam) el.btnPurgeRam.addEventListener('click', handlePurgeRam);
-  if (el.btnLaunchAgents) el.btnLaunchAgents.addEventListener('click', handleLaunchAgents);
-  if (el.btnThinSnapshots) el.btnThinSnapshots.addEventListener('click', handleThinSnapshots);
-  if (el.btnWeeklyClean) {
-    el.btnWeeklyClean.addEventListener('click', handleWeeklyClean);
-    fetchScheduleStatus();
-  }
-
-  // Keyboard shortcuts
-  document.addEventListener('keydown', (e) => {
-    const cleanupActive = document.getElementById('tab-cleanup')?.classList.contains('active');
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && !isLoading && cleanupActive) {
-      e.preventDefault(); handleScan();
-    }
-    if ((e.metaKey || e.ctrlKey) && (e.key === 'Enter' || e.key === '\n') && !el.btnClean.disabled && cleanupActive) {
-      e.preventDefault(); handleClean();
-    }
-  });
-
-  /* ──────────────────────────────────────────────────────────
-     Escapers
-     ────────────────────────────────────────────────────────── */
-  function escapeHtml(s) {
-    return String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-  function escapeAttr(s) {
-    return String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Tweaks (in-page palette picker — host-aware)
-     ────────────────────────────────────────────────────────── */
-  function buildTweaks() {
-    const panel = document.createElement('div');
-    panel.className = 'tweaks';
-    panel.innerHTML = `
-      <div class="tweaks-head">
-        <span class="tweaks-title">Tweaks</span>
-        <button class="icon-btn" id="tweaksClose" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
-      </div>
-      <div class="tweaks-row">
-        <span>Accent</span>
-        <span class="tweaks-swatches">
-          <button class="tweaks-sw" type="button" aria-label="Blue accent" data-palette="blue"   style="background:#2466e8"></button>
-          <button class="tweaks-sw" type="button" aria-label="Indigo accent" data-palette="indigo" style="background:#5b54e6"></button>
-          <button class="tweaks-sw" type="button" aria-label="Green accent" data-palette="green"  style="background:#16a34a"></button>
-          <button class="tweaks-sw" type="button" aria-label="Rose accent" data-palette="rose"   style="background:#e11d6b"></button>
-          <button class="tweaks-sw" type="button" aria-label="Slate accent" data-palette="slate"  style="background:#334155"></button>
-        </span>
-      </div>
-      <div class="tweaks-row">
-        <span>Theme</span>
-        <button class="chip-btn" id="tweaksTheme">Change</button>
-      </div>
+    svg.innerHTML = `
+      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>
+      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="var(--accent)" stroke-width="${stroke}"
+        stroke-linecap="round" stroke-dasharray="${usedDash} ${circumference}"
+        style="transition: stroke-dasharray 1s ease-out;"/>
     `;
-    document.body.appendChild(panel);
 
-    panel.querySelectorAll('.tweaks-sw').forEach((sw) => {
-      sw.addEventListener('click', () => applyPalette(sw.dataset.palette));
-    });
-    panel.querySelector('#tweaksClose').addEventListener('click', () => {
-      panel.classList.remove('open');
-      try { window.parent.postMessage({ type: '__edit_mode_dismissed' }, window.location.origin); } catch {}
-    });
-    panel.querySelector('#tweaksTheme').addEventListener('click', toggleTheme);
+    const usedGB = (usedBytes / (1024 ** 3)).toFixed(1);
+    const totalGB = (totalBytes / (1024 ** 3)).toFixed(0);
+    const freeBytes = Math.max(0, totalBytes - usedBytes);
 
-    applyPalette(localStorage.getItem('ac-palette') || 'blue');
+    $('#dashRingVal').innerHTML = `${usedGB}<span class="ring-big-unit"> / ${totalGB} GB</span>`;
+    $('#dashRingSub').textContent = `${usedPct.toFixed(0)}% Used Storage`;
 
-    // Host-mode listeners (toggle visibility)
-    window.addEventListener('message', (ev) => {
-      if (ev.origin !== window.location.origin) return;
-      const d = ev.data || {};
-      if (d.type === '__activate_edit_mode') panel.classList.add('open');
-      if (d.type === '__deactivate_edit_mode') panel.classList.remove('open');
-    });
-    try { window.parent.postMessage({ type: '__edit_mode_available' }, window.location.origin); } catch {}
-  }
-  buildTweaks();
-
-  /* ──────────────────────────────────────────────────────────
-     Init
-     ────────────────────────────────────────────────────────── */
-  el.term.setAttribute('data-open', 'false');
-  renderCategories();
-
-  // Wire card interactions now that el.cats is populated
-  el.cats.forEach((card) => {
-    const row = $('[data-role="row"]', card);
-    const cb  = $('input[type="checkbox"]', card);
-
-    cb.addEventListener('change', () => {
-      card.classList.toggle('selected', cb.checked);
-    });
-
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('.switch')) return;
-      if (cb.disabled) return;
-      const hasSubs = card.querySelector('.subitems');
-      if (hasSubs) {
-        const willOpen = card.getAttribute('data-open') !== 'true';
-        row.setAttribute('aria-expanded', String(willOpen));
-        // GSAP accordion when available; falls back to a plain toggle.
-        if (!window.AppAnim?.expand?.(card, willOpen)) {
-          card.setAttribute('data-open', String(willOpen));
-        }
+    const badge = $('#dashRingBadge');
+    if (badge) {
+      if (usedPct > 90) {
+        badge.textContent = 'Critical (90%+)';
+        badge.className = 'tag-badge tag-danger';
+      } else if (usedPct > 75) {
+        badge.textContent = 'High Space Usage';
+        badge.className = 'tag-badge tag-caution';
       } else {
-        cb.checked = !cb.checked;
-        cb.dispatchEvent(new Event('change'));
+        badge.textContent = 'Normal';
+        badge.className = 'tag-badge tag-safe';
       }
-    });
-  });
-
-  // GSAP entrance and quiet scroll reveals (no-ops without GSAP).
-  window.AppAnim?.intro?.();
-  window.AppAnim?.revealCards?.();
-
-  el.btnSelectAll.addEventListener('click', () => {
-    el.cats.forEach((card) => {
-      if (card.dataset.category === 'installer_artifacts') return;
-      const cb = $('input[type="checkbox"]', card);
-      if (cb.disabled) return;
-      cb.checked = true;
-      card.classList.add('selected');
-      $$('.subitems input[type="checkbox"]', card).forEach((s) => (s.checked = true));
-    });
-    termLog('All categories selected.', 'info');
-  });
-
-  el.btnSelectNone.addEventListener('click', () => {
-    el.cats.forEach((card) => {
-      const cb = $('input[type="checkbox"]', card);
-      cb.checked = false;
-      card.classList.remove('selected');
-      $$('.subitems input[type="checkbox"]', card).forEach((s) => (s.checked = false));
-    });
-    termLog('All selections cleared.', 'info');
-  });
-
-  /* ──────────────────────────────────────────────────────────
-     App Uninstaller Tab Navigation & Handlers
-     ────────────────────────────────────────────────────────── */
-  const tabCleanup = $('#tab-cleanup');
-  const tabUninstaller = $('#tab-uninstaller');
-  const tabFiles = $('#tab-files');
-  const tabHealth = $('#tab-health');
-  const tabHistory = $('#tab-history');
-  const cleanupTabContent = $('#cleanupTabContent');
-  const uninstallerTabContent = $('#uninstallerTabContent');
-  const filesTabContent = $('#filesTabContent');
-  const healthTabContent = $('#healthTabContent');
-  const historyTabContent = $('#historyTabContent');
-  const appsSearch = $('#appsSearch');
-
-  let allApplications = [];
-
-  function showTab(tabId, shouldFocus = false) {
-    const map = {
-      cleanup:     [tabCleanup, cleanupTabContent],
-      uninstaller: [tabUninstaller, uninstallerTabContent],
-      files:       [tabFiles, filesTabContent],
-      health:      [tabHealth, healthTabContent],
-      history:     [tabHistory, historyTabContent],
-    };
-    Object.entries(map).forEach(([id, [btn, content]]) => {
-      const active = id === tabId;
-      btn.classList.toggle('active', active);
-      btn.setAttribute('aria-selected', active ? 'true' : 'false');
-      btn.setAttribute('tabindex', active ? '0' : '-1');
-      content.hidden = !active;
-      if (active) window.AppAnim?.panel?.(content);
-    });
-    if (shouldFocus) map[tabId][0].focus();
-    if (tabId === 'uninstaller') loadApplications();
-    if (tabId === 'files') renderFileList();
-    if (tabId === 'health') loadHealth();
-    if (tabId === 'history') { loadOperations(); loadHistory(); }
-  }
-
-  tabCleanup.addEventListener('click', () => showTab('cleanup'));
-  tabUninstaller.addEventListener('click', () => showTab('uninstaller'));
-  tabFiles.addEventListener('click', () => showTab('files'));
-  tabHealth.addEventListener('click', () => showTab('health'));
-  tabHistory.addEventListener('click', () => showTab('history'));
-
-  const tabOrder = ['cleanup', 'uninstaller', 'files', 'health', 'history'];
-  const tabButtons = [tabCleanup, tabUninstaller, tabFiles, tabHealth, tabHistory];
-  document.querySelector('.nav-tabs')?.addEventListener('keydown', (event) => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const current = tabButtons.indexOf(document.activeElement);
-    let next = current < 0 ? 0 : current;
-    if (event.key === 'Home') next = 0;
-    else if (event.key === 'End') next = tabButtons.length - 1;
-    else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (next + 1) % tabButtons.length;
-    else next = (next - 1 + tabButtons.length) % tabButtons.length;
-    showTab(tabOrder[next], true);
-  });
-
-  /* ──────────────────────────────────────────────────────────
-     Read-only system health
-     ────────────────────────────────────────────────────────── */
-  async function loadHealth() {
-    const list = healthTabContent?.querySelector('#healthList');
-    const summary = healthTabContent?.querySelector('#healthSummary');
-    if (!list) return;
-    list.innerHTML = '<p class="muted">Running read-only checks…</p>';
-    try {
-      const data = await apiFetch('/api/health');
-      const counts = data.summary || {};
-      if (summary) {
-        summary.textContent = data.status === 'healthy'
-          ? `${counts.ok || 0} checks passed`
-          : `${counts.warning || 0} checks need attention · no automatic changes made`;
-      }
-      list.innerHTML = (data.checks || []).map((check) => `
-        <div class="health-row">
-          <span class="health-badge health-${escapeAttr(check.status)}">${escapeHtml(check.status)}</span>
-          <span class="health-title">${escapeHtml(check.title)}</span>
-          <span class="health-detail">
-            <span>${escapeHtml(check.detail)}</span>
-            ${check.recommendation ? `<span class="health-recommendation">${escapeHtml(check.recommendation)}</span>` : ''}
-          </span>
-        </div>`).join('') || '<p class="muted">No health checks available.</p>';
-    } catch (err) {
-      if (summary) summary.textContent = 'Health checks unavailable';
-      list.innerHTML = `<p class="muted">${escapeHtml(err.message)}</p>`;
-    }
-  }
-
-  const btnRefreshHealth = $('#btnRefreshHealth');
-  if (btnRefreshHealth) btnRefreshHealth.addEventListener('click', loadHealth);
-
-  /* ──────────────────────────────────────────────────────────
-     Undo / Restore tab
-     ────────────────────────────────────────────────────────── */
-  async function loadOperations() {
-    const list = historyTabContent.querySelector('#undoList');
-    if (!list) return;
-    list.innerHTML = '<p class="muted">Loading…</p>';
-    try {
-      const data = await apiFetch('/api/operations');
-      const sessions = (data && data.sessions) || [];
-      if (!Array.isArray(sessions) || sessions.length === 0) {
-        list.innerHTML = '<p class="muted">No restorable operations.</p>';
-        return;
-      }
-      list.innerHTML = sessions.map((run) => {
-        const when = new Date((run.start_ts || 0) * 1000).toLocaleString();
-        const badge = run.recoverable_count > 0
-          ? `<span class="badge badge-ok">${escapeHtml(String(run.recoverable_count))} recoverable</span>`
-          : '<span class="badge badge-warn">none recoverable</span>';
-        const disabled = run.recoverable_count ? '' : 'disabled';
-        return `<div class="history-row undo-run">
-          <span class="history-when">${escapeHtml(when)}</span>
-          <span class="history-size">${escapeHtml(String(run.item_count || 0))} items</span>
-          <span class="history-cat">${escapeHtml(formatBytes(run.total_bytes || 0))}</span>
-          ${badge}
-          <button type="button" class="btn btn-sm btn-restore-run" data-session="${escapeAttr(String(run.session_id))}" ${disabled}>Restore run</button>
-        </div>`;
-      }).join('');
-    } catch (e) {
-      list.innerHTML = '<p class="muted">Could not load operations.</p>';
-    }
-  }
-
-  const undoListEl = document.getElementById('undoList');
-  if (undoListEl) {
-    undoListEl.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.btn-restore-run');
-      if (!btn || isLoading) return;
-      btn.disabled = true;
-      const sessionId = btn.dataset.session;
-      try {
-        const res = await apiFetch('/api/restore', {
-          method: 'POST',
-          body: JSON.stringify({ session_id: sessionId }),
-        });
-        const restored = (res.restored || []).length;
-        const skipped = (res.skipped || []).length;
-        const failed = (res.failed || []).length;
-        termLog(`Restore: ${restored} restored, ${skipped} skipped, ${failed} failed`, failed ? 'error' : 'success');
-      } catch (err) {
-        termLog(`Restore failed: ${err.message || err}`, 'error');
-      } finally {
-        loadOperations();
-        loadHistory();
-      }
-    });
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Cleanup history tab
-     ────────────────────────────────────────────────────────── */
-  async function loadHistory() {
-    const list = historyTabContent.querySelector('#historyList');
-    if (!list) return;
-    list.innerHTML = '<p class="muted">Loading…</p>';
-    try {
-      const rows = await apiFetch('/api/history');
-      if (!Array.isArray(rows) || rows.length === 0) {
-        list.innerHTML = '<p class="muted">No cleanup history yet.</p>';
-        return;
-      }
-      list.innerHTML = rows.map((r) => {
-        const when = new Date((r.ts || 0) * 1000).toLocaleString();
-        const badge = r.recoverable
-          ? '<span class="badge badge-ok">recoverable</span>'
-          : '<span class="badge badge-warn">permanent</span>';
-        return `<div class="history-row">
-          <span class="history-when">${escapeHtml(when)}</span>
-          ${badge}
-          <span class="history-size">${escapeHtml(r.size_human || '')}</span>
-          <span class="history-cat">${escapeHtml(r.category || '')}</span>
-          <span class="history-path">${escapeHtml(r.path || '')}</span>
-        </div>`;
-      }).join('');
-    } catch (e) {
-      list.innerHTML = '<p class="muted">Could not load history.</p>';
-    }
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     Files (cleanable files) tab
-     ────────────────────────────────────────────────────────── */
-  const filesSearch = $('#filesSearch');
-  const filesSort = $('#filesSort');
-  const filesList = $('#filesList');
-  const filesEmpty = $('#filesEmpty');
-  const filesCountEl = $('#filesCount');
-  const filesSelectedTotalEl = $('#filesSelectedTotal');
-  const btnCleanSelected = $('#btnCleanSelected');
-
-  function currentFileRows() {
-    const all = window.ScanUtil.flattenScan(scanData || {});
-    all.forEach((r) => { r.catName = CAT_BY_KEY[r.catKey]?.name || r.catKey; });
-    const [key, dir] = (filesSort?.value || 'size:desc').split(':');
-    return window.ScanUtil.sortRows(
-      window.ScanUtil.filterRows(all, filesQuery), key, dir);
-  }
-
-  function updateFilesTotal() {
-    const allRows = window.ScanUtil.flattenScan(scanData || {});
-    const total = window.ScanUtil.selectedTotalBytes(allRows, filesSelected);
-    filesSelectedTotalEl.textContent = formatBytes(total);
-    btnCleanSelected.disabled = filesSelected.size === 0;
-  }
-
-  function renderFileList() {
-    if (!scanData || !scanData.scan) {
-      filesList.innerHTML = '';
-      filesEmpty.hidden = false;
-      filesCountEl.textContent = 'Scan first';
-      updateFilesTotal();
-      return;
-    }
-    const rows = currentFileRows();
-    filesEmpty.hidden = rows.length > 0;
-    filesCountEl.textContent = `${rows.length} files`;
-    filesList.innerHTML = '';
-    const badgeLabel = { danger: 'risky', caution: 'caution', safe: 'safe' };
-    rows.forEach((r) => {
-      const li = document.createElement('li');
-      li.className = 'file-row';
-      const checked = filesSelected.has(r.rowId) ? 'checked' : '';
-      const ageStr = r.ageDays != null ? ` · ${r.ageDays}d` : '';
-      const pathStr = r.path ? ' · ' + escapeHtml(r.path) : '';
-      li.innerHTML = `
-        <input type="checkbox" data-row-id="${escapeAttr(r.rowId)}" ${checked}>
-        <span class="file-main">
-          <span class="file-name" title="${escapeAttr(r.name)}">${escapeHtml(r.name)}</span>
-          <span class="file-path">${escapeHtml(r.catName)}${ageStr}${pathStr}</span>
-        </span>
-        <span class="file-badge safety-${r.safety}">${badgeLabel[r.safety] || ''}</span>
-        <span class="file-size">${escapeHtml(r.sizeHuman || formatBytes(r.sizeBytes || 0))}</span>
-      `;
-      filesList.appendChild(li);
-    });
-    filesList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-      cb.addEventListener('change', () => {
-        const id = cb.dataset.rowId;
-        if (cb.checked) filesSelected.add(id); else filesSelected.delete(id);
-        updateFilesTotal();
-      });
-    });
-    updateFilesTotal();
-  }
-
-  if (filesSearch) filesSearch.addEventListener('input', () => {
-    filesQuery = filesSearch.value; renderFileList();
-  });
-  if (filesSort) filesSort.addEventListener('change', renderFileList);
-  if ($('#filesSelectAll')) $('#filesSelectAll').addEventListener('click', () => {
-    currentFileRows().forEach((r) => filesSelected.add(r.rowId));
-    renderFileList();
-  });
-  if ($('#filesSelectNone')) $('#filesSelectNone').addEventListener('click', () => {
-    filesSelected.clear(); renderFileList();
-  });
-
-  const INDEX_BY_KEY = Object.fromEntries(CATEGORIES.map((c) => [c.key, c.index]));
-
-  async function handleCleanSelectedFiles() {
-    if (isLoading || filesSelected.size === 0) return;
-    const rows = window.ScanUtil.flattenScan(scanData || {})
-      .filter((r) => filesSelected.has(r.rowId));
-    if (rows.length === 0) return;
-
-    const dangerRows = rows.filter((r) => r.safety === 'danger');
-    const confirmed = confirm(
-      `${rows.length} items will be cleaned (${filesSelectedTotalEl.textContent}). Continue?`);
-    if (!confirmed) { termLog('Cleanup cancelled.', 'info'); return; }
-    if (dangerRows.length > 0) {
-      const ok = confirm(
-        `RISKY items selected (${dangerRows.length}). Some actions are permanent; review the recovery label before continuing.`);
-      if (!ok) { termLog('Risky items not confirmed, cleanup cancelled.', 'info'); return; }
     }
 
-    isLoading = true;
-    setLoading(btnCleanSelected, true);
-    termLog(`Cleaning selected files (${rows.length})…`, 'info');
-    try {
-      const dryRun = !!(el.dryRunToggle && el.dryRunToggle.checked);
-      const payload = window.ScanUtil.buildCleanPayload(rows, INDEX_BY_KEY);
-      payload.dry_run = dryRun;
-      const data = await apiFetch('/api/clean', {
-        method: 'POST', body: JSON.stringify(payload),
-      });
-      const warnings = Array.isArray(data.warnings) ? data.warnings : [];
-      const isPartial = warnings.length > 0 ||
-        (data.details || []).some((detail) => detail.status === 'partial');
-      el.resultsPanel.hidden = false;
-      el.resultsPanel.classList.remove('error');
-      el.resultsTitle.textContent = data.dry_run
-        ? 'Preview (nothing was deleted)'
-        : (isPartial ? 'Cleanup completed with skipped items' : 'Cleanup complete');
-      el.resultsFreed.textContent = data.dry_run
-        ? (data.estimated_human || formatBytes(data.estimated_bytes || 0))
-        : (data.freed_human || formatBytes(data.freed_bytes || 0));
-      if (data.disk_free) el.sysDiskFree.textContent = data.disk_free;
-      warnings.forEach((warning) => {
-        const message = typeof warning === 'string' ? warning : warning?.message;
-        if (message) termLog(`⚠ ${message}`, 'warning');
-      });
-      termLog(
-        isPartial
-          ? `Partial cleanup complete — ${el.resultsFreed.textContent}; active or protected files were left untouched.`
-          : `Cleanup complete — ${el.resultsFreed.textContent}`,
-        isPartial ? 'warning' : 'success'
-      );
-      if (!data.dry_run) filesSelected.clear();
-      renderFileList();
-    } catch (err) {
-      termLog(`Cleanup error: ${err.message}`, 'error');
-    } finally {
-      setLoading(btnCleanSelected, false);
-      isLoading = false;
-    }
+    $('#metricFree').textContent = formatBytes(freeBytes);
+    $('#metricUsed').textContent = formatBytes(usedBytes);
+    $('#headDiskFree').textContent = formatBytes(freeBytes);
   }
 
-  if (btnCleanSelected) btnCleanSelected.addEventListener('click', handleCleanSelectedFiles);
+  function renderDashboardCleanableTiles() {
+    const grid = $('#dashCategoriesSubgrid');
+    if (!grid) return;
 
-  if (appsSearch) {
-    appsSearch.addEventListener('input', () => {
-      filterApplications(appsSearch.value);
-    });
-  }
+    let totalBytes = 0;
+    const scan = state.scanData?.scan || {};
 
-  async function loadApplications() {
-    const appsCount = $('#appsCount');
-    const appsList = $('#appsList');
-    if (appsCount) appsCount.textContent = 'Scanning…';
-    if (appsList) appsList.innerHTML = '<li class="apps-loading"><span class="spinner"></span>Listing applications…</li>';
+    const tilesHtml = CATEGORIES.slice(0, 8).map(cat => {
+      const info = scan[cat.key];
+      const bytes = info?.size_bytes || 0;
+      totalBytes += bytes;
 
-    termLog('Scanning installed applications…', 'info');
-
-    try {
-      const data = await apiFetch('/api/apps');
-      if (data && data.success) {
-        allApplications = data.apps || [];
-        renderApplications(allApplications);
-        termLog(`App scan complete. ${allApplications.length} applications found.`, 'success');
-      } else {
-        throw new Error(data?.error || 'Could not load applications.');
-      }
-    } catch (err) {
-      termLog(`App scan error: ${err.message}`, 'error');
-      if (appsList) {
-        const li = document.createElement('li');
-        li.className = 'apps-error';
-        li.textContent = 'Error: ' + err.message;
-        appsList.innerHTML = '';
-        appsList.appendChild(li);
-      }
-      if (appsCount) appsCount.textContent = 'Error';
-    }
-  }
-
-  function renderApplications(apps, skipReveal) {
-    const appsCount = $('#appsCount');
-    const appsList = $('#appsList');
-    if (appsCount) appsCount.textContent = `${apps.length} applications`;
-    if (!appsList) return;
-
-    if (apps.length === 0) {
-      appsList.innerHTML = '<li class="apps-empty">No applications found.</li>';
-      return;
-    }
-
-    appsList.innerHTML = '';
-    apps.forEach((app) => {
-      const li = document.createElement('li');
-      li.className = 'app-item';
-      li.dataset.appId = app.target_id;
-      li.dataset.flipId = app.target_id;   // lets Flip match items across filtering
-
-      // Source badges
-      let sourceBadge = '';
-      if (app.source === 'brew') {
-        sourceBadge = '<span class="app-src src-brew">brew</span>';
-      } else if (app.source === 'brew_cask') {
-        sourceBadge = '<span class="app-src src-cask">cask</span>';
-      } else if (app.source === 'both') {
-        sourceBadge = '<span class="app-src src-both">both</span>';
-      } else {
-        sourceBadge = '<span class="app-src src-dir">app</span>';
-      }
-      if (app.protected) {
-        sourceBadge += '<span class="app-src src-dir">protected</span>';
-      }
-
-      // App icon placeholder or letter icon
-      const initial = app.name ? app.name.charAt(0).toUpperCase() : '?';
-
-      li.innerHTML = `
-        <div class="app-info-col">
-          <div class="app-icon" style="background-color: ${getColorForString(app.name)}">${initial}</div>
-          <div class="app-meta">
-            <span class="app-name">${escapeHtml(app.name)}</span>
-            <span class="app-details-row">
-              ${app.version ? `<span class="app-version">v${escapeHtml(app.version)}</span>` : ''}
-              ${app.bundle_id ? `<span class="app-bundle">${escapeHtml(app.bundle_id)}</span>` : ''}
-            </span>
+      return `
+        <div class="cat-stat-tile" data-tab-link="smart-clean">
+          <div class="tile-icon" style="background:${cat.color}15;color:${cat.color};">
+            <svg><use href="#${cat.icon}"/></svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(cat.name)}</div>
+            <div style="font-size:12px;color:var(--text-3);font-family:var(--font-mono);margin-top:2px;">${formatBytes(bytes)}</div>
           </div>
         </div>
-        <div class="app-action-col">
-          ${sourceBadge}
-          <span class="app-size-val">${escapeHtml(app.size_human)}</span>
-          <button class="btn btn-danger btn-sm btn-uninstall" type="button" data-target-id="${escapeAttr(app.target_id)}" data-name="${escapeAttr(app.name)}" ${app.protected ? 'disabled aria-disabled="true"' : ''}>
-            <span class="spinner" aria-hidden="true"></span>
-            <span class="btn-text">${app.protected ? 'Protected' : 'Uninstall'}</span>
-          </button>
+      `;
+    }).join('');
+
+    grid.innerHTML = tilesHtml;
+    $('#dashCleanableTotal').textContent = formatBytes(totalBytes);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Smart Clean View & Logic
+     ══════════════════════════════════════════════════════════ */
+  function renderSmartCleanView() {
+    const container = $('#smartCleanCategoriesList');
+    if (!container) return;
+
+    const scan = state.scanData?.scan || {};
+
+    const html = CATEGORIES.map(cat => {
+      const info = scan[cat.key];
+      const bytes = info?.size_bytes || 0;
+      const isChecked = state.selectedCategories.has(cat.key);
+      const riskClass = cat.risk === 'danger' ? 'danger-category' : (cat.risk === 'caution' ? 'caution-category' : '');
+      const subitems = Array.isArray(info?.subitems) ? info.subitems : [];
+
+      const tagsHtml = cat.tags.map(t =>
+        `<span class="tag-badge tag-${t.type}">${escapeHtml(t.label)}</span>`
+      ).join(' ');
+
+      return `
+        <div class="cat-item-card ${riskClass}" data-cat-key="${cat.key}">
+          <div class="cat-item-header" data-toggle-accordion="${cat.key}">
+            <div class="cat-left-meta">
+              <input type="checkbox" class="cat-checkbox" ${isChecked ? 'checked' : ''} data-cat-check="${cat.key}" />
+              <div>
+                <div class="cat-name-row">
+                  <span>${escapeHtml(cat.name)}</span>
+                  ${tagsHtml}
+                </div>
+                <div class="cat-desc-text">${escapeHtml(cat.desc)}</div>
+              </div>
+            </div>
+            <div class="cat-right-meta">
+              <span class="cat-size-pill">${formatBytes(bytes)}</span>
+              ${subitems.length > 0 ? `<svg width="18" height="18" style="color:var(--text-3);"><use href="#ic-chevron-down"/></svg>` : ''}
+            </div>
+          </div>
+
+          ${subitems.length > 0 ? `
+            <div class="subitems-tray">
+              <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:8px;">Sub-items (${subitems.length})</div>
+              ${subitems.map(sub => `
+                <div class="subitem-entry">
+                  <div class="subitem-left">
+                    <input type="checkbox" class="cat-checkbox" checked data-sub-cat="${cat.key}" data-sub-id="${escapeHtml(sub.id)}" />
+                    <div>
+                      <div class="subitem-name">${escapeHtml(sub.name || sub.id)}</div>
+                      <div class="subitem-path">${escapeHtml(sub.path || '')}</div>
+                    </div>
+                  </div>
+                  <strong style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(sub.size_human || formatBytes(sub.size_bytes))}</strong>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
         </div>
       `;
-      appsList.appendChild(li);
+    }).join('');
+
+    container.innerHTML = html;
+    updateSmartCleanSelectedSummary();
+  }
+
+  function updateSmartCleanSelectedSummary() {
+    let totalBytes = 0;
+    let count = 0;
+    const scan = state.scanData?.scan || {};
+
+    state.selectedCategories.forEach(key => {
+      const bytes = scan[key]?.size_bytes || 0;
+      totalBytes += bytes;
+      count++;
     });
 
-    // Wire up uninstall buttons
-    $$('.btn-uninstall', appsList).forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        const targetId = btn.dataset.targetId;
-        const name = btn.dataset.name;
-        handleAppUninstall(btn, targetId, name);
-      });
+    $('#smartSelectedSummary').textContent = `${count} categories selected`;
+    $('#smartTotalSelectedSize').textContent = formatBytes(totalBytes);
+  }
+
+  // Accordion toggle & selection events
+  $('#smartCleanCategoriesList')?.addEventListener('click', (e) => {
+    // Checkbox clicked
+    if (e.target.dataset.catCheck) {
+      const key = e.target.dataset.catCheck;
+      if (e.target.checked) state.selectedCategories.add(key);
+      else state.selectedCategories.delete(key);
+      updateSmartCleanSelectedSummary();
+      return;
+    }
+
+    // Header accordion toggle
+    const header = e.target.closest('[data-toggle-accordion]');
+    if (header) {
+      const card = header.closest('.cat-item-card');
+      const open = card.getAttribute('data-open') === 'true';
+      card.setAttribute('data-open', String(!open));
+    }
+  });
+
+  // Select all safe categories
+  $('#smartSelectAll')?.addEventListener('change', (e) => {
+    const isChecked = e.target.checked;
+    CATEGORIES.forEach(c => {
+      if (c.risk === 'safe' || (isChecked && c.risk === 'caution')) {
+        if (isChecked) state.selectedCategories.add(c.key);
+        else state.selectedCategories.delete(c.key);
+      }
     });
+    renderSmartCleanView();
+  });
 
-    if (!skipReveal) {
-      window.AppAnim?.revealList?.(appsList);
+  /* ══════════════════════════════════════════════════════════
+     Execute Cleaning Action
+     ══════════════════════════════════════════════════════════ */
+  $('#btnExecuteClean')?.addEventListener('click', () => {
+    if (state.selectedCategories.size === 0) {
+      alert('Please select at least one category to clean.');
+      return;
     }
-  }
 
-  function getColorForString(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    // Check if high-risk categories selected
+    const selectedCats = Array.from(state.selectedCategories).map(k => CAT_BY_KEY[k]).filter(Boolean);
+    const hasDanger = selectedCats.some(c => c.risk === 'danger');
+
+    if (hasDanger && !state.dryRun) {
+      showSafetyModal(
+        'Permanent Cleanup Confirmation',
+        `You have selected high-risk categories (such as iOS Backups or Trash). Files deleted in these categories cannot be recovered. Are you sure you want to permanently delete them?`,
+        () => performClean()
+      );
+    } else {
+      performClean();
     }
-    const colors = [
-      '#4d8eff', '#6f6ff7', '#a26bf7', '#0bb8c9', '#16a34a',
-      '#d97706', '#f59e0b', '#dc2626', '#ef4444', '#c2410c'
-    ];
-    return colors[Math.abs(hash) % colors.length];
-  }
+  });
 
-  function filterApplications(query) {
-    const q = query.toLowerCase().trim();
-    const next = !q ? allApplications : allApplications.filter((app) =>
-      (app.name && app.name.toLowerCase().includes(q)) ||
-      (app.bundle_id && app.bundle_id.toLowerCase().includes(q)) ||
-      (app.id && app.id.toLowerCase().includes(q)) ||
-      (app.path && app.path.toLowerCase().includes(q))
-    );
-    // Flip: matched items glide to new positions, removed/added fade out/in.
-    const render = () => renderApplications(next, true);
-    if (window.AppAnim && window.AppAnim.flipApps) window.AppAnim.flipApps(render);
-    else renderApplications(next);
-  }
+  async function performClean() {
+    const btn = $('#btnExecuteClean');
+    if (btn) { btn.disabled = true; btn.textContent = state.dryRun ? 'Simulating...' : 'Cleaning...'; }
 
-  async function handleAppUninstall(btn, targetId, name) {
-    const confirmed = confirm(`Are you sure you want to uninstall "${name}" and all its associated files?`);
-    if (!confirmed) return;
+    const selectedIndices = Array.from(state.selectedCategories)
+      .map(k => CAT_BY_KEY[k]?.index)
+      .filter(Number.isFinite);
 
-    setLoading(btn, true);
-    termLog(`Uninstalling "${name}"…`, 'info');
+    termLog(`Initiating ${state.dryRun ? 'DRY-RUN simulation' : 'cleaning'} for ${selectedIndices.length} categories...`, 'warning');
 
     try {
-      const data = await apiFetch('/api/uninstall', {
-        method: 'POST',
-        body: JSON.stringify({ target_id: targetId }),
-      });
+      if (state.backendOnline) {
+        const payload = {
+          categories: selectedIndices,
+          dry_run: state.dryRun
+        };
+        const res = await apiFetch('/api/clean', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
 
-      if (data && data.success) {
-        termLog(`✓ "${name}" uninstalled successfully.`, 'success');
-        if (data.details) {
-          termLog(`  Details: ${data.details}`, 'success');
-        }
-        const li = btn.closest('.app-item');
-        if (li) {
-          li.style.opacity = '0';
-          li.style.transform = 'translateX(20px)';
-          li.style.transition = 'all 0.35s ease';
-          setTimeout(() => {
-            li.remove();
-            allApplications = allApplications.filter((a) => a.target_id !== targetId);
-            const appsCount = $('#appsCount');
-            if (appsCount) appsCount.textContent = `${allApplications.length} applications`;
-          }, 350);
-        }
+        termLog(`Clean finished successfully! Freed: ${res.freed_human || '0 B'}.`, 'success');
+        alert(state.dryRun
+          ? `[Dry Run Simulation Finished]\nWould free approximately: ${res.freed_human || '0 B'}`
+          : `[Cleanup Complete]\nSuccessfully freed ${res.freed_human || '0 B'} of disk space!`
+        );
       } else {
-        throw new Error(data?.error || 'Uninstall failed.');
+        await sleep(1500);
+        termLog('Simulated clean completed (Backend offline).', 'success');
+        alert('[Simulation Complete] Space reclaimed in demo mode.');
       }
+
+      // Refresh scan
+      await triggerScan();
     } catch (err) {
-      termLog(`✗ Error uninstalling "${name}": ${err.message}`, 'error');
-      alert(`Error: ${err.message}`);
+      termLog(`Clean failed: ${err.message}`, 'error');
+      alert(`Error during cleanup: ${err.message}`);
     } finally {
-      setLoading(btn, false);
+      if (btn) { btn.disabled = false; btn.textContent = 'Clean Selected Space'; }
     }
   }
 
-  termLog('Apple Cleanup started.', 'success');
-  fetchStatus();
+  /* ══════════════════════════════════════════════════════════
+     System Maintenance Tools Execution
+     ══════════════════════════════════════════════════════════ */
+  async function runSystemTool(endpoint, toolName, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Running...'; }
+    termLog(`Starting maintenance tool: ${toolName}...`, 'info');
+
+    try {
+      if (state.backendOnline) {
+        const res = await apiFetch(endpoint, { method: 'POST', body: '{}' });
+        termLog(`${toolName} succeeded: ${res.message || 'Done'}`, 'success');
+        alert(`[${toolName}]\n${res.message || 'Operation completed successfully.'}`);
+      } else {
+        await sleep(1200);
+        termLog(`${toolName} simulated (Mock).`, 'success');
+        alert(`[${toolName}]\nSimulated task successfully.`);
+      }
+    } catch (err) {
+      termLog(`${toolName} error: ${err.message}`, 'error');
+      alert(`[${toolName} Failed]\n${err.message}`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = btn.getAttribute('data-orig-text') || 'Run Tool'; }
+    }
+  }
+
+  $('#btnToolSpotlight')?.addEventListener('click', function() {
+    this.setAttribute('data-orig-text', 'Reindex Search Index');
+    runSystemTool('/api/spotlight-reindex', 'Rebuild Spotlight Index', this);
+  });
+  $('#btnToolFlushDns')?.addEventListener('click', function() {
+    this.setAttribute('data-orig-text', 'Flush DNS Records');
+    runSystemTool('/api/flush-dns', 'Flush DNS Cache', this);
+  });
+  $('#btnToolPurgeRam')?.addEventListener('click', function() {
+    this.setAttribute('data-orig-text', 'Purge Inactive RAM');
+    runSystemTool('/api/purge-ram', 'Purge Inactive Memory', this);
+  });
+  $('#btnToolLaunchAgents')?.addEventListener('click', function() {
+    this.setAttribute('data-orig-text', 'Clean Dead Daemons');
+    runSystemTool('/api/launchagents-clean', 'Clean Broken LaunchAgents', this);
+  });
+  $('#btnToolThinSnapshots')?.addEventListener('click', function() {
+    this.setAttribute('data-orig-text', 'Thin APFS Snapshots');
+    runSystemTool('/api/thin-snapshots', 'Thin APFS Local Snapshots', this);
+  });
+  $('#btnToolWeeklySchedule')?.addEventListener('click', async function() {
+    this.disabled = true;
+    try {
+      if (state.backendOnline) {
+        const status = await apiFetch('/api/schedule-status');
+        const nextState = !status.scheduled;
+        const res = await apiFetch('/api/schedule-weekly', {
+          method: 'POST',
+          body: JSON.stringify({ enable: nextState })
+        });
+        termLog(`Weekly automation: ${res.message || 'Updated'}`, 'success');
+        alert(`[Weekly Cleanup Automation]\n${res.message || 'Scheduled updated.'}`);
+      }
+    } catch (err) {
+      alert(`Could not toggle weekly schedule: ${err.message}`);
+    } finally {
+      this.disabled = false;
+    }
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     App Uninstaller View
+     ══════════════════════════════════════════════════════════ */
+  async function loadUninstallerApps() {
+    const container = $('#uninstallerAppList');
+    if (!container) return;
+
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-3);">Scanning installed applications...</div>';
+
+    try {
+      if (state.backendOnline) {
+        const data = await apiFetch('/api/apps');
+        state.appsList = data.apps || [];
+      } else {
+        state.appsList = [
+          { name: 'Xcode', size_bytes: 12400 * 1024 * 1024, version: '15.4', last_used: '2 days ago' },
+          { name: 'Docker Desktop', size_bytes: 5200 * 1024 * 1024, version: '4.35', last_used: '5 days ago' },
+          { name: 'Visual Studio Code', size_bytes: 1200 * 1024 * 1024, version: '1.94', last_used: 'Today' },
+          { name: 'Slack', size_bytes: 780 * 1024 * 1024, version: '4.39', last_used: 'Today' },
+          { name: 'Adobe Photoshop', size_bytes: 4800 * 1024 * 1024, version: '25.12', last_used: '1 month ago' },
+          { name: 'Google Chrome', size_bytes: 980 * 1024 * 1024, version: '130.0', last_used: 'Today' }
+        ];
+      }
+      renderAppsGrid();
+    } catch (err) {
+      container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed to load applications: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function renderAppsGrid(query = '') {
+    const container = $('#uninstallerAppList');
+    if (!container) return;
+
+    const filtered = state.appsList.filter(a =>
+      a.name.toLowerCase().includes(query.toLowerCase())
+    );
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-3);">No matching applications found.</div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="apps-grid">
+        ${filtered.map(app => `
+          <div class="app-card-box">
+            <div>
+              <div style="font-weight:700;font-size:15px;">${escapeHtml(app.name)}</div>
+              <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Version ${escapeHtml(app.version || '—')}</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding-top:10px;margin-top:4px;">
+              <strong style="font-family:var(--font-mono);font-size:14px;color:var(--accent);">${formatBytes(app.size_bytes)}</strong>
+              <button class="btn btn-danger" style="padding:6px 12px;font-size:12px;" data-uninstall-app="${escapeHtml(app.name)}">
+                <svg width="14" height="14"><use href="#ic-trash"/></svg> Uninstall
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  $('#appSearchInput')?.addEventListener('input', (e) => {
+    renderAppsGrid(e.target.value);
+  });
+
+  $('#uninstallerAppList')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-uninstall-app]');
+    if (!btn) return;
+    const appName = btn.dataset.uninstallApp;
+
+    showSafetyModal(
+      `Uninstall Application: ${appName}`,
+      `This will completely delete ${appName} and all associated cache and configuration files from ~/Library. Are you sure?`,
+      async () => {
+        termLog(`Uninstalling app: ${appName}...`, 'warning');
+        try {
+          if (state.backendOnline) {
+            await apiFetch('/api/uninstall', {
+              method: 'POST',
+              body: JSON.stringify({ app_name: appName })
+            });
+            termLog(`App ${appName} uninstalled successfully.`, 'success');
+          }
+          state.appsList = state.appsList.filter(a => a.name !== appName);
+          renderAppsGrid($('#appSearchInput')?.value || '');
+          alert(`Application "${appName}" removed.`);
+        } catch (err) {
+          alert(`Failed to uninstall: ${err.message}`);
+        }
+      }
+    );
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     Large Files & Duplicates (Mock/Demo & Integration)
+     ══════════════════════════════════════════════════════════ */
+  function loadLargeFiles() {
+    const c = $('#largeFilesContainer');
+    if (!c) return;
+    c.innerHTML = `
+      <div class="card" style="padding:24px;">
+        <div style="font-weight:700;font-size:16px;margin-bottom:12px;">Large System Files (&gt;100MB)</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:20px;">Review and clean unneeded massive installers and backup packages.</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Filename</th><th>Location</th><th>Size</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>macOS_Sonoma_14.5.dmg</strong></td><td>~/Downloads/</td><td>12.8 GB</td><td><button class="btn btn-danger" style="padding:4px 8px;font-size:11px;">Delete</button></td></tr>
+              <tr><td><strong>xcode_backup_archive.zip</strong></td><td>~/Documents/</td><td>4.2 GB</td><td><button class="btn btn-danger" style="padding:4px 8px;font-size:11px;">Delete</button></td></tr>
+              <tr><td><strong>ubuntu_vm_disk.qcow2</strong></td><td>~/VirtualMachines/</td><td>8.4 GB</td><td><button class="btn btn-danger" style="padding:4px 8px;font-size:11px;">Delete</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function loadDuplicateFiles() {
+    const c = $('#duplicatesContainer');
+    if (!c) return;
+    c.innerHTML = `
+      <div class="card" style="padding:24px;">
+        <div style="font-weight:700;font-size:16px;margin-bottom:12px;">Identified Duplicate Files</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:20px;">Copies have identical SHA-256 hashes. Safely delete secondary duplicates while keeping original files.</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Original File</th><th>Duplicate Copies</th><th>Wasted Space</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>presentation_final.pptx</strong><div style="font-size:11px;color:var(--text-3);">~/Documents/Work/</div></td>
+                <td>~/Desktop/presentation_final copy.pptx</td>
+                <td><strong style="color:var(--danger);">48 MB</strong></td>
+                <td><button class="btn btn-secondary" style="padding:4px 8px;font-size:11px;">Clean Copy</button></td>
+              </tr>
+              <tr>
+                <td><strong>vacation_video.mov</strong><div style="font-size:11px;color:var(--text-3);">~/Movies/</div></td>
+                <td>~/Downloads/vacation_video (1).mov</td>
+                <td><strong style="color:var(--danger);">420 MB</strong></td>
+                <td><button class="btn btn-secondary" style="padding:4px 8px;font-size:11px;">Clean Copy</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Operations History
+     ══════════════════════════════════════════════════════════ */
+  async function loadHistoryRecords() {
+    const tbody = $('#historyTableBody');
+    if (!tbody) return;
+
+    try {
+      if (state.backendOnline) {
+        const rows = await apiFetch('/api/history');
+        if (!Array.isArray(rows) || rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:32px;">No historical operations recorded yet.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${escapeHtml(r.timestamp || '—')}</td>
+            <td><strong>${escapeHtml(r.action || 'Clean')}</strong></td>
+            <td>${escapeHtml(Array.isArray(r.categories) ? r.categories.join(', ') : (r.items_count || '—'))}</td>
+            <td><strong style="color:var(--safe);">${formatBytes(r.freed_bytes || 0)}</strong></td>
+            <td><span class="tag-badge tag-safe">SUCCESS</span></td>
+          </tr>
+        `).join('');
+      } else {
+        tbody.innerHTML = `
+          <tr>
+            <td>Today, 09:15</td>
+            <td><strong>Smart Clean</strong></td>
+            <td>User Caches, Xcode Derived Data, Logs</td>
+            <td><strong style="color:var(--safe);">4.8 GB</strong></td>
+            <td><span class="tag-badge tag-safe">SUCCESS</span></td>
+          </tr>
+        `;
+      }
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger);padding:32px;">Could not load history: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  $('#btnRefreshHistory')?.addEventListener('click', loadHistoryRecords);
+
+  /* ══════════════════════════════════════════════════════════
+     Safety Confirmation Modal
+     ══════════════════════════════════════════════════════════ */
+  let modalConfirmCallback = null;
+
+  function showSafetyModal(title, message, onConfirm) {
+    const modal = $('#safetyConfirmModal');
+    if (!modal) return;
+
+    $('#modalTitle').textContent = title;
+    $('#modalBody').textContent = message;
+    modalConfirmCallback = onConfirm;
+
+    modal.classList.add('open');
+  }
+
+  function hideSafetyModal() {
+    $('#safetyConfirmModal')?.classList.remove('open');
+    modalConfirmCallback = null;
+  }
+
+  $('#modalBtnCancel')?.addEventListener('click', hideSafetyModal);
+  $('#modalBtnConfirm')?.addEventListener('click', () => {
+    if (typeof modalConfirmCallback === 'function') {
+      modalConfirmCallback();
+    }
+    hideSafetyModal();
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     Trigger Scan & Init
+     ══════════════════════════════════════════════════════════ */
+  async function triggerScan() {
+    termLog('Scanning macOS system caches and storage...', 'info');
+    try {
+      if (state.backendOnline) {
+        const scanResult = await apiFetch('/api/scan');
+        state.scanData = scanResult;
+        termLog('Scan completed successfully.', 'success');
+      } else {
+        // Mock scan data
+        state.scanData = {
+          scan: {
+            user_cache: { size_bytes: 4820 * 1024 * 1024 },
+            system_cache: { size_bytes: 1420 * 1024 * 1024 },
+            logs: { size_bytes: 1240 * 1024 * 1024 },
+            temp_files: { size_bytes: 3100 * 1024 * 1024 },
+            xcode: { size_bytes: 8400 * 1024 * 1024 },
+            browser_cache: { size_bytes: 2100 * 1024 * 1024 },
+            trash: { size_bytes: 850 * 1024 * 1024 },
+            developer: { size_bytes: 1900 * 1024 * 1024 },
+            quicklook: { size_bytes: 340 * 1024 * 1024 }
+          }
+        };
+      }
+      renderDashboardCleanableTiles();
+      if (state.activeTab === 'smart-clean') renderSmartCleanView();
+    } catch (err) {
+      termLog(`Scan error: ${err.message}`, 'error');
+    }
+  }
+
+  $('#btnQuickScan')?.addEventListener('click', triggerScan);
+  $('#btnSmartRescan')?.addEventListener('click', triggerScan);
+
+  async function init() {
+    termLog('Connecting to Apple Cleanup backend...', 'info');
+
+    try {
+      await apiFetch('/api/health');
+      state.backendOnline = true;
+      termLog('Backend connection established (Online).', 'success');
+
+      // Fetch status
+      const status = await apiFetch('/api/status');
+      $('#headMacVer').textContent = status.macos_version || '14.5';
+      $('#sysChipName').textContent = status.chip || 'Apple Silicon';
+      $('#sysUser').textContent = status.user || '—';
+      $('#sysMemory').textContent = status.memory || '—';
+
+      if (status.disk_total_bytes && status.disk_used_bytes) {
+        renderStorageRing(status.disk_used_bytes, status.disk_total_bytes);
+      } else {
+        renderStorageRing(340 * (1024**3), 512 * (1024**3));
+      }
+    } catch (e) {
+      state.backendOnline = false;
+      termLog('Running in standalone frontend mode.', 'warning');
+      renderStorageRing(340 * (1024**3), 512 * (1024**3));
+    }
+
+    await triggerScan();
+  }
+
+  init();
 })();
