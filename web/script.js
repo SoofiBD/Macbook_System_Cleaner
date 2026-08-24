@@ -221,25 +221,46 @@
   /* ══════════════════════════════════════════════════════════
      API Bridge
      ══════════════════════════════════════════════════════════ */
-  const CLEANUP_TOKEN = $('meta[name="cleanup-token"]')?.content || '';
+  function getCleanupToken() {
+    return $('meta[name="cleanup-token"]')?.content || '';
+  }
 
   async function apiFetch(url, options = {}) {
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Cleanup-Token': CLEANUP_TOKEN,
-        ...(options.headers || {}),
-      },
-    });
+    const token = getCleanupToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Cleanup-Token': token,
+      ...(options.headers || {}),
+    };
+
+    let res;
+    try {
+      res = await fetch(url, {
+        ...options,
+        headers,
+      });
+    } catch (netErr) {
+      throw new Error(`Network connection failed: ${netErr.message || 'Check if server is running'}`);
+    }
+
     if (!res.ok) {
-      let msg = `Server error (HTTP ${res.status})`;
-      try { const e = await res.json(); if (e?.error) msg = e.error; } catch {}
+      let msg = `Server HTTP error ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.error) msg = errJson.error;
+      } catch {}
       throw new Error(msg);
     }
-    const data = await res.json();
+
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      throw new Error(`Invalid JSON response from server`);
+    }
+
     if (data?.success === false) {
-      throw new Error(data.error || 'Operation failed.');
+      throw new Error(data.error || data.message || 'Operation failed.');
     }
     return data;
   }
@@ -555,16 +576,17 @@
     try {
       if (state.backendOnline) {
         const res = await apiFetch(endpoint, { method: 'POST', body: '{}' });
-        termLog(`${toolName} succeeded: ${res.message || 'Done'}`, 'success');
-        alert(`[${toolName}]\n${res.message || 'Operation completed successfully.'}`);
+        const successMsg = res.message || res.status || res.note || 'Operation completed successfully.';
+        termLog(`${toolName} succeeded: ${successMsg}`, 'success');
+        alert(`[${toolName}]\n${successMsg}`);
       } else {
-        await sleep(1200);
-        termLog(`${toolName} simulated (Mock).`, 'success');
-        alert(`[${toolName}]\nSimulated task successfully.`);
+        await sleep(1000);
+        termLog(`${toolName} executed in simulation mode.`, 'success');
+        alert(`[${toolName}]\nOperation simulated successfully.`);
       }
     } catch (err) {
       termLog(`${toolName} error: ${err.message}`, 'error');
-      alert(`[${toolName} Failed]\n${err.message}`);
+      alert(`[${toolName}]\n${err.message}`);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = btn.getAttribute('data-orig-text') || 'Run Tool'; }
     }
