@@ -230,8 +230,10 @@ tab (loopback + session-token protected, like every other write endpoint):
 
 - The dashboard preselects only conservative cache/log categories. Permanent,
   developer, mail, Trash and external-volume actions require explicit opt-in.
-- The app uninstaller moves app bundles and exact associated files to Trash;
-  Homebrew casks use `brew uninstall --cask --zap` first.
+- The app uninstaller moves app bundles and exact associated files to Trash:
+  bundle-ID based support/cache/container/script/web data, preferences,
+  launch agents, saved state and matching user crash reports. Homebrew casks
+  use `brew uninstall --cask --zap` first.
 - macOS will recreate many of these files as needed.
 - The `Downloads` folder is not touched.
 - System Cache cleanup requires `sudo` (terminal mode).

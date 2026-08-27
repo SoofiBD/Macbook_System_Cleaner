@@ -109,6 +109,11 @@ clean_app_uninstaller() {
           safe_rm "$dir" "Leftover: $dir"
         fi
       done < <(app_leftover_paths "$app_name" "$bundle_id")
+      while IFS= read -r -d '' dir; do
+        if [ -e "$dir" ]; then
+          safe_rm "$dir" "Diagnostic report: $dir"
+        fi
+      done < <(app_diagnostic_report_paths "$app_name" "$bundle_id")
     done
     return
   fi
@@ -196,7 +201,34 @@ app_leftover_paths() {
     printf '%s\0' "$HOME/Library/LaunchAgents/${bundle_id}.plist"
     printf '%s\0' "$HOME/Library/Preferences/${bundle_id}.plist"
     printf '%s\0' "$HOME/Library/Saved Application State/${bundle_id}.savedState"
+
+    # macOS creates identifier-suffixed variants for some preference, agent,
+    # and state files (for example ByHost preference files).  They remain
+    # exact bundle-id matches; do not broaden these to vendor/app-name terms.
+    local candidate base
+    for candidate in "$HOME/Library/Preferences/${bundle_id}".*.plist \
+      "$HOME/Library/Preferences/ByHost/${bundle_id}".*.plist \
+      "$HOME/Library/LaunchAgents/${bundle_id}".*.plist \
+      "$HOME/Library/Saved Application State/${bundle_id}".*.savedState; do
+      [ -e "$candidate" ] || continue
+      printf '%s\0' "$candidate"
+    done
   fi
+}
+
+# Crash reports include a timestamp after the executable or bundle name.  Only
+# inspect the user's DiagnosticReports directory: system reports require a
+# separate privileged flow and must not be widened by app removal.
+app_diagnostic_report_paths() {
+  local app_name="$1" bundle_id="$2" report_dir entry
+  report_dir="$HOME/Library/Logs/DiagnosticReports"
+  [ -d "$report_dir" ] || return 0
+  while IFS= read -r -d '' entry; do
+    case "$(basename "$entry")" in
+      "${app_name}"_*) printf '%s\0' "$entry" ;;
+      "${bundle_id}"_*) [ -n "$bundle_id" ] && printf '%s\0' "$entry" ;;
+    esac
+  done < <(find "$report_dir" -maxdepth 1 -type f -print0 2>/dev/null)
 }
 
 get_app_display_name() {
@@ -233,6 +265,11 @@ scan_app_uninstaller_subitems_json() {
       s=$(get_size_bytes "$dir") || s=0
       leftover_total=$((leftover_total + s))
     done < <(app_leftover_paths "$app_name" "$bundle_id")
+    while IFS= read -r -d '' dir; do
+      [ -e "$dir" ] || continue
+      s=$(get_size_bytes "$dir") || s=0
+      leftover_total=$((leftover_total + s))
+    done < <(app_diagnostic_report_paths "$app_name" "$bundle_id")
     sz_h=$(format_bytes "$leftover_total")
     disp_name=$(get_app_display_name "$app")
     esc_name=$(json_escape_str "$disp_name")
@@ -246,4 +283,3 @@ scan_app_uninstaller_subitems_json() {
     echo -n "        {\"id\": \"$esc_id\", \"name\": \"$esc_name\", \"bundle_id\": \"$esc_bundle\", \"size_bytes\": $leftover_total, \"size_human\": \"$sz_h\", \"is_orphaned\": false}"
   done < <(find /Applications "$HOME/Applications" -maxdepth 3 -name "*.app" -prune -print0 2>/dev/null | sort -z)
 }
-

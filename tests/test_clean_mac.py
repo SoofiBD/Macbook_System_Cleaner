@@ -509,16 +509,23 @@ def test_explicit_uninstaller_trashes_app_and_exact_leftovers(tmp_path):
         tmp_path / f"Library/Caches/{bundle_id}",
         tmp_path / f"Library/WebKit/{bundle_id}",
         tmp_path / f"Library/Application Scripts/{bundle_id}",
+        tmp_path / f"Library/Preferences/ByHost/{bundle_id}.A1B2C3.plist",
+        tmp_path / f"Library/LaunchAgents/{bundle_id}.helper.plist",
+        tmp_path / f"Library/Saved Application State/{bundle_id}.session.savedState",
     ]
     for path in leftovers:
         make_dir_with_bytes(path, kb=1)
+    crash_report = tmp_path / "Library/Logs/DiagnosticReports/My, Fancy App_2026-08-27.crash"
+    crash_report.parent.mkdir(parents=True, exist_ok=True)
+    crash_report.write_bytes(b"x" * 1024)
 
     data = _run_explicit_uninstall(tmp_path, app, bundle_id, trash_ok=True)
 
     assert data["success"] is True, data
     assert not app.exists()
     assert all(not path.exists() for path in leftovers)
-    assert data["items_cleaned"] == 1 + len(leftovers)
+    assert not crash_report.exists()
+    assert data["items_cleaned"] == 2 + len(leftovers)
 
 
 def test_uninstaller_reports_permission_failure_and_preserves_data(tmp_path):
