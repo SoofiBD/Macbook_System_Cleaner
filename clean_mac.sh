@@ -367,7 +367,7 @@ else
   RED=''; YELLOW=''; GREEN=''; CYAN=''; BLUE=''; BOLD=''; DIM=''; NC=''
 fi
 
-VERSION="2.1.0"
+VERSION="2.3.4"
 SUDO_AVAILABLE=false
 TOTAL_FREED=0
 TOTAL_ITEMS=0
