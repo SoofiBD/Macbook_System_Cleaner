@@ -16,15 +16,19 @@ _trash_item() {
   fi
 
   # Tier 1: AppleScript (native Finder trash with undo support).
-  # Pass the path as an argv item rather than interpolating it into the script
-  # source, so quotes/backslashes in a filename can't break or inject script.
-  if osascript -e 'on run argv' \
-               -e 'tell application "Finder" to move POSIX file (item 1 of argv) to trash' \
-               -e 'end run' "$path" >/dev/null 2>&1; then
-    if $expected_was_free && { [ -e "$expected" ] || [ -L "$expected" ]; }; then
-      echo "$expected"
+  # Only run if not running in a mocked test environment ($HOME in /tmp or /var)
+  if [[ "$HOME" != /private/var/* && "$HOME" != /var/* && "$HOME" != /tmp/* && "${APPLE_CLEANUP_FORCE_MANUAL_TRASH:-0}" != "1" ]]; then
+    if osascript -e 'on run argv' \
+                 -e 'set theItem to (POSIX file (item 1 of argv)) as alias' \
+                 -e 'tell application "Finder" to delete theItem' \
+                 -e 'end run' "$path" >/dev/null 2>&1; then
+      if $expected_was_free && { [ -e "$expected" ] || [ -L "$expected" ]; }; then
+        echo "$expected"
+      elif [ ! -e "$path" ]; then
+        echo "$expected"
+      fi
+      return 0
     fi
-    return 0
   fi
 
   # Tier 2: Manual mv to ~/.Trash with collision-safe naming

@@ -720,7 +720,7 @@
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding-top:10px;margin-top:4px;">
               <strong style="font-family:var(--font-mono);font-size:14px;color:var(--accent);">${formatBytes(app.size_bytes)}</strong>
-              <button class="btn btn-danger" style="padding:6px 12px;font-size:12px;" data-uninstall-app="${escapeHtml(app.name)}">
+              <button class="btn btn-danger" style="padding:6px 12px;font-size:12px;" data-uninstall-app="${escapeHtml(app.name)}" data-target-id="${escapeHtml(app.target_id || '')}">
                 <svg width="14" height="14"><use href="#ic-trash"/></svg> Uninstall
               </button>
             </div>
@@ -738,6 +738,7 @@
     const btn = e.target.closest('[data-uninstall-app]');
     if (!btn) return;
     const appName = btn.dataset.uninstallApp;
+    const targetId = btn.dataset.targetId;
 
     showSafetyModal(
       `Uninstall Application: ${appName}`,
@@ -748,11 +749,11 @@
           if (state.backendOnline) {
             await apiFetch('/api/uninstall', {
               method: 'POST',
-              body: JSON.stringify({ app_name: appName })
+              body: JSON.stringify({ target_id: targetId, app_name: appName })
             });
             termLog(`App ${appName} uninstalled successfully.`, 'success');
           }
-          state.appsList = state.appsList.filter(a => a.name !== appName);
+          state.appsList = state.appsList.filter(a => targetId ? a.target_id !== targetId : a.name !== appName);
           renderAppsGrid($('#appSearchInput')?.value || '');
           alert(`Application "${appName}" removed.`);
         } catch (err) {

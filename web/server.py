@@ -1631,6 +1631,19 @@ class CleanupHandler(http.server.BaseHTTPRequestHandler):
             return
 
         target_id = payload.get("target_id")
+        if not target_id and payload.get("app_name"):
+            app_name = payload.get("app_name")
+            try:
+                candidates = [item for item in discover_applications()
+                              if item.get("name") == app_name
+                              or item.get("id") == app_name
+                              or item.get("folder_name") == app_name
+                              or item.get("folder_name") == f"{app_name}.app"]
+                if len(candidates) == 1:
+                    target_id = candidates[0].get("target_id")
+            except Exception:
+                pass
+
         if not isinstance(target_id, str) or not target_id:
             self._send_error_json("target_id is required", 400)
             return
