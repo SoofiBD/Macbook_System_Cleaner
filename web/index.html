@@ -7,6 +7,9 @@
   <meta name="theme-color" content="#f8fafc" />
   <meta name="cleanup-token" content="__CLEANUP_TOKEN__" />
   <title>Apple Cleanup — Web Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310b981' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83'/%3E%3C/svg%3E" />
 </head>
@@ -234,12 +237,12 @@
               </div>
               <div class="storage-metrics-list" id="dashStorageMetrics">
                 <div class="storage-metric-row">
-                  <span class="storage-metric-label"><span class="metric-bullet" style="background:#10b981;"></span> Free Space</span>
-                  <strong id="metricFree">—</strong>
+                  <span class="storage-metric-label"><span class="metric-bullet" id="bulletUsed" style="background:var(--accent);"></span> Used Space</span>
+                  <strong id="metricUsed">—</strong>
                 </div>
                 <div class="storage-metric-row">
-                  <span class="storage-metric-label"><span class="metric-bullet" style="background:#94a3b8;"></span> Used Space</span>
-                  <strong id="metricUsed">—</strong>
+                  <span class="storage-metric-label"><span class="metric-bullet" id="bulletFree" style="background:var(--text-3);"></span> Free Space</span>
+                  <strong id="metricFree">—</strong>
                 </div>
               </div>
             </div>

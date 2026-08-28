@@ -327,9 +327,32 @@
     const usedPct = Math.min(100, Math.max(0, (usedBytes / totalBytes) * 100));
     const usedDash = (usedPct / 100) * circumference;
 
+    let ringColor = 'var(--accent)';
+    const badge = $('#dashRingBadge');
+    if (badge) {
+      if (usedPct > 90) {
+        badge.textContent = 'Critical (90%+)';
+        badge.className = 'tag-badge tag-danger';
+        ringColor = 'var(--danger)';
+      } else if (usedPct > 75) {
+        badge.textContent = 'High Space Usage';
+        badge.className = 'tag-badge tag-caution';
+        ringColor = 'var(--warning)';
+      } else {
+        badge.textContent = 'Normal';
+        badge.className = 'tag-badge tag-safe';
+        ringColor = 'var(--accent)';
+      }
+    }
+
+    const bulletUsed = $('#bulletUsed');
+    if (bulletUsed) {
+      bulletUsed.style.background = ringColor;
+    }
+
     svg.innerHTML = `
       <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>
-      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="var(--accent)" stroke-width="${stroke}"
+      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${ringColor}" stroke-width="${stroke}"
         stroke-linecap="round" stroke-dasharray="${usedDash} ${circumference}"
         style="transition: stroke-dasharray 1s ease-out;"/>
     `;
@@ -341,22 +364,8 @@
     $('#dashRingVal').innerHTML = `${usedGB}<span class="ring-big-unit"> / ${totalGB} GB</span>`;
     $('#dashRingSub').textContent = `${usedPct.toFixed(0)}% Used Storage`;
 
-    const badge = $('#dashRingBadge');
-    if (badge) {
-      if (usedPct > 90) {
-        badge.textContent = 'Critical (90%+)';
-        badge.className = 'tag-badge tag-danger';
-      } else if (usedPct > 75) {
-        badge.textContent = 'High Space Usage';
-        badge.className = 'tag-badge tag-caution';
-      } else {
-        badge.textContent = 'Normal';
-        badge.className = 'tag-badge tag-safe';
-      }
-    }
-
-    $('#metricFree').textContent = formatBytes(freeBytes);
     $('#metricUsed').textContent = formatBytes(usedBytes);
+    $('#metricFree').textContent = formatBytes(freeBytes);
     $('#headDiskFree').textContent = formatBytes(freeBytes);
   }
 
