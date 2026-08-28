@@ -2817,11 +2817,28 @@ do_clean_ids_json() {
 }
 
 do_status_json() {
+  local total_bytes=0 used_bytes=0 free_bytes=0
+  if command -v python3 >/dev/null 2>&1; then
+    read -r total_bytes used_bytes free_bytes <<< "$(python3 -c "import shutil; u=shutil.disk_usage('/'); print(u.total, u.used, u.free)" 2>/dev/null)"
+  fi
+  if [ -z "$total_bytes" ] || [ "$total_bytes" -eq 0 ] 2>/dev/null; then
+    local df_line; df_line=$(df -k / 2>/dev/null | awk 'NR==2 {print $2, $3, $4}')
+    local total_kb; total_kb=$(echo "$df_line" | awk '{print $1}')
+    local used_kb; used_kb=$(echo "$df_line" | awk '{print $2}')
+    local free_kb; free_kb=$(echo "$df_line" | awk '{print $3}')
+    total_bytes=$(( ${total_kb:-0} * 1024 ))
+    used_bytes=$(( ${used_kb:-0} * 1024 ))
+    free_bytes=$(( ${free_kb:-0} * 1024 ))
+  fi
+
   cat <<ENDJSON
 {
   "status": "ready",
   "version": "$VERSION",
   "disk_free": "$(get_free_disk)",
+  "disk_total_bytes": ${total_bytes:-0},
+  "disk_used_bytes": ${used_bytes:-0},
+  "disk_free_bytes": ${free_bytes:-0},
   "macos_version": "$(sw_vers -productVersion 2>/dev/null || echo 'unknown')",
   "user": "$(whoami)"
 }

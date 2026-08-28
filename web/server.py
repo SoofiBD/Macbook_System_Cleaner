@@ -1331,10 +1331,19 @@ class CleanupHandler(http.server.BaseHTTPRequestHandler):
 
     def _handle_status(self):
         data, err = self._run_script(["--status-json"], timeout=15)
-        if err:
-            self._send_error_json(f"Status error: {err}")
-        else:
-            self._send_json(data)
+        if err or not isinstance(data, dict):
+            data = {"status": "ready"}
+        
+        # Ensure disk storage info is directly populated and accurate
+        if "disk_total_bytes" not in data or "disk_used_bytes" not in data:
+            try:
+                usage = shutil.disk_usage("/")
+                data["disk_total_bytes"] = usage.total
+                data["disk_used_bytes"] = usage.used
+                data["disk_free_bytes"] = usage.free
+            except Exception:
+                pass
+        self._send_json(data)
 
     def _handle_health(self):
         self._send_json(_build_health_report())

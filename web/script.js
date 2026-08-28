@@ -140,11 +140,12 @@
   /* ══════════════════════════════════════════════════════════
      Helper Utilities
      ══════════════════════════════════════════════════════════ */
-  function formatBytes(bytes) {
+  function formatBytes(bytes, useDecimal = false) {
     if (!bytes || bytes <= 0) return '0 B';
+    const base = useDecimal ? 1000 : 1024;
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
-    return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(base)));
+    return (bytes / Math.pow(base, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
   }
 
   function escapeHtml(str) {
@@ -315,11 +316,37 @@
   /* ══════════════════════════════════════════════════════════
      Dashboard & Storage Ring
      ══════════════════════════════════════════════════════════ */
+  function renderEmptyStorageRing() {
+    const svg = $('#storageRingSvg');
+    if (!svg) return;
+    const size = 200, stroke = 12;
+    const radius = (size - stroke) / 2;
+    const cx = size / 2, cy = size / 2;
+
+    svg.innerHTML = `
+      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>
+    `;
+
+    $('#dashRingVal').innerHTML = `— <span class="ring-big-unit">GB</span>`;
+    $('#dashRingSub').textContent = `Ready to scan`;
+    const badge = $('#dashRingBadge');
+    if (badge) {
+      badge.textContent = 'Standby';
+      badge.className = 'tag-badge tag-safe';
+    }
+    $('#metricUsed').textContent = '—';
+    $('#metricFree').textContent = '—';
+    $('#headDiskFree').textContent = '—';
+  }
+
   function renderStorageRing(usedBytes, totalBytes) {
     const svg = $('#storageRingSvg');
-    if (!svg || !totalBytes) return;
+    if (!svg || !totalBytes) {
+      renderEmptyStorageRing();
+      return;
+    }
 
-    const size = 190, stroke = 14;
+    const size = 200, stroke = 12;
     const radius = (size - stroke) / 2;
     const circumference = 2 * Math.PI * radius;
     const cx = size / 2, cy = size / 2;
@@ -357,16 +384,16 @@
         style="transition: stroke-dasharray 1s ease-out;"/>
     `;
 
-    const usedGB = (usedBytes / (1024 ** 3)).toFixed(1);
-    const totalGB = (totalBytes / (1024 ** 3)).toFixed(0);
+    const usedGB = (usedBytes / 1e9).toFixed(1);
+    const totalGB = (totalBytes / 1e9).toFixed(1);
     const freeBytes = Math.max(0, totalBytes - usedBytes);
 
-    $('#dashRingVal').innerHTML = `${usedGB}<span class="ring-big-unit"> / ${totalGB} GB</span>`;
-    $('#dashRingSub').textContent = `${usedPct.toFixed(0)}% Used Storage`;
+    $('#dashRingVal').innerHTML = `${usedGB} <span class="ring-big-unit">GB</span>`;
+    $('#dashRingSub').textContent = `${usedPct.toFixed(0)}% of ${totalGB} GB Used`;
 
-    $('#metricUsed').textContent = formatBytes(usedBytes);
-    $('#metricFree').textContent = formatBytes(freeBytes);
-    $('#headDiskFree').textContent = formatBytes(freeBytes);
+    $('#metricUsed').textContent = formatBytes(usedBytes, true);
+    $('#metricFree').textContent = formatBytes(freeBytes, true);
+    $('#headDiskFree').textContent = formatBytes(freeBytes, true);
   }
 
   function renderDashboardCleanableTiles() {
@@ -875,20 +902,7 @@
         state.scanData = scanResult;
         termLog('Scan completed successfully.', 'success');
       } else {
-        // Mock scan data
-        state.scanData = {
-          scan: {
-            user_cache: { size_bytes: 4820 * 1024 * 1024 },
-            system_cache: { size_bytes: 1420 * 1024 * 1024 },
-            logs: { size_bytes: 1240 * 1024 * 1024 },
-            temp_files: { size_bytes: 3100 * 1024 * 1024 },
-            xcode: { size_bytes: 8400 * 1024 * 1024 },
-            browser_cache: { size_bytes: 2100 * 1024 * 1024 },
-            trash: { size_bytes: 850 * 1024 * 1024 },
-            developer: { size_bytes: 1900 * 1024 * 1024 },
-            quicklook: { size_bytes: 340 * 1024 * 1024 }
-          }
-        };
+        state.scanData = { scan: {} };
       }
       renderDashboardCleanableTiles();
       if (state.activeTab === 'smart-clean') renderSmartCleanView();
@@ -901,6 +915,8 @@
   $('#btnSmartRescan')?.addEventListener('click', triggerScan);
 
   async function init() {
+    // Start with clean empty ring state (no fake numbers)
+    renderEmptyStorageRing();
     termLog('Connecting to Apple Cleanup backend...', 'info');
 
     try {
@@ -908,22 +924,24 @@
       state.backendOnline = true;
       termLog('Backend connection established (Online).', 'success');
 
-      // Fetch status
+      // Fetch live status from backend
       const status = await apiFetch('/api/status');
-      $('#headMacVer').textContent = status.macos_version || '14.5';
-      $('#sysChipName').textContent = status.chip || 'Apple Silicon';
-      $('#sysUser').textContent = status.user || '—';
-      $('#sysMemory').textContent = status.memory || '—';
+      if (status) {
+        if (status.macos_version) $('#headMacVer').textContent = status.macos_version;
+        if (status.chip) $('#sysChipName').textContent = status.chip;
+        if (status.user) $('#sysUser').textContent = status.user;
+        if (status.memory) $('#sysMemory').textContent = status.memory;
 
-      if (status.disk_total_bytes && status.disk_used_bytes) {
-        renderStorageRing(status.disk_used_bytes, status.disk_total_bytes);
-      } else {
-        renderStorageRing(340 * (1024**3), 512 * (1024**3));
+        if (status.disk_total_bytes && status.disk_used_bytes) {
+          renderStorageRing(status.disk_used_bytes, status.disk_total_bytes);
+        } else {
+          renderEmptyStorageRing();
+        }
       }
     } catch (e) {
       state.backendOnline = false;
       termLog('Running in standalone frontend mode.', 'warning');
-      renderStorageRing(340 * (1024**3), 512 * (1024**3));
+      renderEmptyStorageRing();
     }
 
     await triggerScan();
